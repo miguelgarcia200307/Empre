@@ -10,4 +10,7 @@ export default defineConfig({
       },
     }),
   ],
+  preview: {
+    allowedHosts: ['empre-4.onrender.com']
+  }
 })
