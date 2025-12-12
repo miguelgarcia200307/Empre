@@ -1,0 +1,872 @@
+import { useState, useEffect, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
+import { supabase } from '../../lib/supabaseClient'
+import { generateThemeFromStore, HEADER_STYLES, CARD_STYLES, BUTTON_STYLES } from '../../data/templates'
+import { 
+  ShoppingBag, 
+  Search, 
+  X, 
+  Plus, 
+  Minus, 
+  Trash2, 
+  MessageCircle,
+  Store,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  Package
+} from 'lucide-react'
+
+// ============================================
+// TIENDA PÚBLICA - Vista del cliente
+// ============================================
+
+export default function TiendaPublica({ 
+  isPreview = false, 
+  previewStore = null,
+  previewProducts = [],
+  previewCategories = [] 
+}) {
+  const { slug } = useParams()
+  
+  // Estados principales
+  const [store, setStore] = useState(null)
+  const [products, setProducts] = useState([])
+  const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(!isPreview) // No loading si es preview
+  const [error, setError] = useState(null)
+  
+  // Estados de UI
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [cart, setCart] = useState([])
+  const [isCartOpen, setIsCartOpen] = useState(false)
+  const [imageIndex, setImageIndex] = useState(0)
+
+  // En modo preview, usar datos proporcionados directamente
+  useEffect(() => {
+    if (isPreview && previewStore) {
+      setStore(previewStore)
+      setProducts(previewProducts || [])
+      setCategories(previewCategories || [])
+      setLoading(false)
+    }
+  }, [isPreview, previewStore, previewProducts, previewCategories])
+
+  // Cargar datos de la tienda (solo si NO es preview)
+  useEffect(() => {
+    if (isPreview) return // No cargar datos en modo preview
+
+    const fetchStoreData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Obtener tienda por slug
+        const { data: storeData, error: storeError } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('slug', slug)
+          .eq('is_active', true)
+          .single()
+
+        if (storeError || !storeData) {
+          setError('not_found')
+          return
+        }
+
+        setStore(storeData)
+
+        // Obtener categorías activas
+        const { data: categoriesData } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('store_id', storeData.id)
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true })
+
+        setCategories(categoriesData || [])
+
+        // Obtener productos activos
+        const { data: productsData } = await supabase
+          .from('products')
+          .select('*')
+          .eq('store_id', storeData.id)
+          .eq('is_active', true)
+          .order('sort_order', { ascending: true })
+
+        setProducts(productsData || [])
+
+        // Incrementar vistas (solo en modo real, no preview)
+        await supabase
+          .from('stores')
+          .update({ total_views: (storeData.total_views || 0) + 1 })
+          .eq('id', storeData.id)
+
+      } catch (err) {
+        console.error('Error loading store:', err)
+        setError('error')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (slug) {
+      fetchStoreData()
+    }
+  }, [slug, isPreview])
+
+  // Filtrar productos
+  const filteredProducts = useMemo(() => {
+    return products.filter(product => {
+      const matchesSearch = !searchQuery || 
+        product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      
+      const matchesCategory = selectedCategory === 'all' || 
+        product.category_id === selectedCategory
+
+      return matchesSearch && matchesCategory
+    })
+  }, [products, searchQuery, selectedCategory])
+
+  // Funciones del carrito
+  const addToCart = (product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.id === product.id)
+      if (existing) {
+        return prev.map(item => 
+          item.id === product.id 
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      }
+      return [...prev, { ...product, quantity: 1 }]
+    })
+  }
+
+  const updateQuantity = (productId, delta) => {
+    setCart(prev => {
+      return prev.map(item => {
+        if (item.id === productId) {
+          const newQty = item.quantity + delta
+          return newQty > 0 ? { ...item, quantity: newQty } : null
+        }
+        return item
+      }).filter(Boolean)
+    })
+  }
+
+  const removeFromCart = (productId) => {
+    setCart(prev => prev.filter(item => item.id !== productId))
+  }
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  }, [cart])
+
+  const cartCount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0)
+  }, [cart])
+
+  // Formatear precio
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: store?.currency || 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(price)
+  }
+
+  // Enviar pedido por WhatsApp (deshabilitado en preview)
+  const sendWhatsAppOrder = () => {
+    if (isPreview) return // No permitir en modo preview
+    if (!store?.whatsapp || cart.length === 0) return
+
+    // Sanitizar número: solo dígitos, sin espacios ni caracteres especiales
+    const phone = store.whatsapp.replace(/\D/g, '')
+    
+    // Construir mensaje con emojis usando códigos Unicode explícitos
+    const lines = [
+      '\u{1F6D2} *Nuevo Pedido - ' + store.name + '*',
+      '',
+      '\u{1F4E6} *Productos:*',
+      ...cart.map((item, index) => 
+        `${index + 1}. ${item.name} x${item.quantity} - ${formatPrice(item.price * item.quantity)}`
+      ),
+      '',
+      '\u{1F4B0} *Total: ' + formatPrice(cartTotal) + '*',
+      '',
+      '\u{00A1}Gracias por tu pedido! \u{1F64F}'
+    ]
+    
+    const message = lines.join('\n')
+
+    // Construir URL con encoding correcto
+    const encodedMessage = encodeURIComponent(message)
+    const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`
+    
+    // Abrir en nueva ventana
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  // Colores de la tienda (con fallbacks)
+  const primaryColor = store?.primary_color || '#2563eb'
+  const secondaryColor = store?.secondary_color || '#7c3aed'
+
+  // Theme basado en plantilla (si existe)
+  const theme = useMemo(() => {
+    if (!store) return null
+    return generateThemeFromStore(store)
+  }, [store])
+
+  // ============================================
+  // ESTADOS DE CARGA Y ERROR
+  // ============================================
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div 
+            className="w-12 h-12 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+            style={{ borderColor: primaryColor, borderTopColor: 'transparent' }}
+          />
+          <p className="text-gray-500">Cargando tienda...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error === 'not_found') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
+        <div className="text-center max-w-md">
+          <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Store className="w-12 h-12 text-gray-400" />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-3">Tienda no encontrada</h1>
+          <p className="text-gray-500 mb-6">
+            La tienda que buscas no existe o ha sido desactivada.
+          </p>
+          <a 
+            href="/"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+          >
+            Volver al inicio
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Error al cargar</h1>
+          <p className="text-gray-500 mb-6">
+            Hubo un problema al cargar la tienda. Intenta nuevamente.
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ============================================
+  // RENDER PRINCIPAL
+  // ============================================
+
+  // Guardia: si no hay store, mostrar loading (para modo preview mientras carga)
+  if (!store) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div 
+            className="w-12 h-12 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-4"
+            style={{ borderColor: '#2563eb', borderTopColor: 'transparent' }}
+          />
+          <p className="text-gray-500">Cargando tienda...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div 
+      className="min-h-screen"
+      style={{ 
+        backgroundColor: theme?.background || '#f9fafb',
+        fontFamily: theme?.fontFamily || 'Inter, system-ui, sans-serif',
+        '--eg-primary': theme?.primary || primaryColor,
+        '--eg-secondary': theme?.secondary || secondaryColor,
+        '--eg-accent': theme?.accent || primaryColor,
+        '--eg-bg': theme?.background || '#f9fafb',
+        '--eg-surface': theme?.surface || '#ffffff',
+      }}
+    >
+      {/* Header */}
+      <header 
+        className={`sticky top-0 z-40 ${
+          theme?.headerStyle === 'glass' 
+            ? 'backdrop-blur-lg bg-white/80 border-b border-gray-100' 
+            : theme?.headerStyle === 'minimal'
+            ? 'bg-transparent'
+            : 'bg-white border-b border-gray-200'
+        }`}
+      >
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+          {/* Logo y nombre */}
+          <div className="flex items-center gap-3">
+            {store.logo_url ? (
+              <img 
+                src={store.logo_url} 
+                alt={store.name}
+                className="w-10 h-10 rounded-xl object-cover"
+              />
+            ) : (
+              <div 
+                className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg"
+                style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+              >
+                {store.name?.charAt(0)?.toUpperCase()}
+              </div>
+            )}
+            <div>
+              <h1 className="font-semibold text-gray-900 leading-tight">{store.name}</h1>
+              {store.city && (
+                <p className="text-xs text-gray-500">{store.city}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Carrito */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="relative p-2.5 rounded-xl hover:bg-gray-100 transition-colors"
+          >
+            <ShoppingBag className="w-6 h-6 text-gray-700" />
+            {cartCount > 0 && (
+              <span 
+                className="absolute -top-1 -right-1 w-5 h-5 text-xs font-bold text-white rounded-full flex items-center justify-center"
+                style={{ backgroundColor: primaryColor }}
+              >
+                {cartCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* Banner */}
+      {store.banner_url ? (
+        <div className="relative h-48 md:h-64 overflow-hidden">
+          <img 
+            src={store.banner_url} 
+            alt="Banner"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+        </div>
+      ) : (
+        <div 
+          className="h-32 md:h-40"
+          style={{ background: `linear-gradient(135deg, ${primaryColor}20, ${secondaryColor}20)` }}
+        />
+      )}
+
+      {/* Contenido principal */}
+      <main className="max-w-6xl mx-auto px-4 py-6">
+        {/* Mensaje de bienvenida */}
+        {store.welcome_message && (
+          <div 
+            className="mb-6 p-4 rounded-2xl text-white"
+            style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+          >
+            <p className="text-center font-medium">{store.welcome_message}</p>
+          </div>
+        )}
+
+        {/* Barra de búsqueda */}
+        <div className="relative mb-6">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar productos..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-12 pr-4 h-12 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent transition-shadow"
+            style={{ '--tw-ring-color': primaryColor }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-full"
+            >
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          )}
+        </div>
+
+        {/* Filtro por categorías */}
+        {categories.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-hide">
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                selectedCategory === 'all'
+                  ? 'text-white shadow-lg'
+                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              }`}
+              style={selectedCategory === 'all' ? { backgroundColor: primaryColor } : {}}
+            >
+              Todos
+            </button>
+            {categories.map(category => (
+              <button
+                key={category.id}
+                onClick={() => setSelectedCategory(category.id)}
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  selectedCategory === category.id
+                    ? 'text-white shadow-lg'
+                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                }`}
+                style={selectedCategory === category.id ? { backgroundColor: primaryColor } : {}}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Grid de productos */}
+        {filteredProducts.length === 0 ? (
+          <div className="text-center py-16">
+            <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {searchQuery ? 'Sin resultados' : 'No hay productos'}
+            </h3>
+            <p className="text-gray-500">
+              {searchQuery 
+                ? 'Intenta con otra búsqueda' 
+                : 'Esta tienda aún no tiene productos disponibles'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredProducts.map(product => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                primaryColor={primaryColor}
+                formatPrice={formatPrice}
+                onView={() => {
+                  setSelectedProduct(product)
+                  setImageIndex(0)
+                }}
+                onAddToCart={() => addToCart(product)}
+              />
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Botón flotante de WhatsApp (si hay productos en carrito) */}
+      {cart.length > 0 && !isCartOpen && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="flex items-center gap-3 px-6 py-4 text-white rounded-2xl shadow-2xl hover:scale-105 transition-transform"
+            style={{ backgroundColor: primaryColor }}
+          >
+            <ShoppingBag className="w-5 h-5" />
+            <span className="font-semibold">Ver carrito ({cartCount})</span>
+            <span className="font-bold">{formatPrice(cartTotal)}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Modal de producto */}
+      {selectedProduct && (
+        <ProductModal
+          product={selectedProduct}
+          primaryColor={primaryColor}
+          secondaryColor={secondaryColor}
+          formatPrice={formatPrice}
+          imageIndex={imageIndex}
+          setImageIndex={setImageIndex}
+          onClose={() => setSelectedProduct(null)}
+          onAddToCart={() => {
+            addToCart(selectedProduct)
+            setSelectedProduct(null)
+          }}
+        />
+      )}
+
+      {/* Drawer del carrito */}
+      {isCartOpen && (
+        <CartDrawer
+          cart={cart}
+          store={store}
+          primaryColor={primaryColor}
+          formatPrice={formatPrice}
+          cartTotal={cartTotal}
+          updateQuantity={updateQuantity}
+          removeFromCart={removeFromCart}
+          onClose={() => setIsCartOpen(false)}
+          onCheckout={sendWhatsAppOrder}
+        />
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// COMPONENTES INTERNOS
+// ============================================
+
+// Tarjeta de producto
+function ProductCard({ product, primaryColor, formatPrice, onView, onAddToCart }) {
+  const hasDiscount = product.compare_price && product.compare_price > product.price
+
+  return (
+    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-lg hover:border-gray-200 transition-all group">
+      {/* Imagen */}
+      <div 
+        className="relative aspect-square bg-gray-100 cursor-pointer overflow-hidden"
+        onClick={onView}
+      >
+        {product.main_image_url ? (
+          <img
+            src={product.main_image_url}
+            alt={product.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Package className="w-12 h-12 text-gray-300" />
+          </div>
+        )}
+        
+        {/* Badge de descuento */}
+        {hasDiscount && (
+          <span 
+            className="absolute top-2 left-2 px-2 py-1 text-xs font-bold text-white rounded-lg"
+            style={{ backgroundColor: primaryColor }}
+          >
+            -{Math.round((1 - product.price / product.compare_price) * 100)}%
+          </span>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="p-3">
+        <h3 
+          className="font-medium text-gray-900 text-sm mb-1 line-clamp-2 cursor-pointer hover:underline"
+          onClick={onView}
+        >
+          {product.name}
+        </h3>
+        
+        <div className="flex items-center gap-2 mb-3">
+          <span className="font-bold text-gray-900">
+            {formatPrice(product.price)}
+          </span>
+          {hasDiscount && (
+            <span className="text-sm text-gray-400 line-through">
+              {formatPrice(product.compare_price)}
+            </span>
+          )}
+        </div>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onAddToCart()
+          }}
+          className="w-full py-2.5 text-sm font-medium text-white rounded-xl transition-all hover:opacity-90 active:scale-95"
+          style={{ backgroundColor: primaryColor }}
+        >
+          Agregar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Modal de detalle del producto
+function ProductModal({ product, primaryColor, secondaryColor, formatPrice, imageIndex, setImageIndex, onClose, onAddToCart }) {
+  const hasDiscount = product.compare_price && product.compare_price > product.price
+  
+  // Galería de imágenes
+  const images = [
+    product.main_image_url,
+    ...(Array.isArray(product.gallery_urls) ? product.gallery_urls : [])
+  ].filter(Boolean)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+      {/* Overlay */}
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-2xl max-h-[90vh] bg-white rounded-t-3xl md:rounded-3xl overflow-hidden animate-slide-up">
+        {/* Cerrar */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 p-2 bg-white/90 backdrop-blur rounded-full shadow-lg hover:bg-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="flex flex-col md:flex-row max-h-[90vh] overflow-auto">
+          {/* Imagen */}
+          <div className="relative w-full md:w-1/2 aspect-square bg-gray-100 flex-shrink-0">
+            {images.length > 0 ? (
+              <>
+                <img
+                  src={images[imageIndex]}
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                />
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setImageIndex(i => i > 0 ? i - 1 : images.length - 1)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg hover:bg-white"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setImageIndex(i => i < images.length - 1 ? i + 1 : 0)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg hover:bg-white"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                    {/* Indicadores */}
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {images.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setImageIndex(i)}
+                          className={`w-2 h-2 rounded-full transition-all ${
+                            i === imageIndex ? 'w-6' : 'bg-white/50'
+                          }`}
+                          style={i === imageIndex ? { backgroundColor: primaryColor } : {}}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Package className="w-20 h-20 text-gray-300" />
+              </div>
+            )}
+          </div>
+
+          {/* Detalles */}
+          <div className="flex-1 p-6 flex flex-col">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{product.name}</h2>
+            
+            {/* Precio */}
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-2xl font-bold" style={{ color: primaryColor }}>
+                {formatPrice(product.price)}
+              </span>
+              {hasDiscount && (
+                <>
+                  <span className="text-lg text-gray-400 line-through">
+                    {formatPrice(product.compare_price)}
+                  </span>
+                  <span 
+                    className="px-2 py-0.5 text-xs font-bold text-white rounded-md"
+                    style={{ backgroundColor: secondaryColor }}
+                  >
+                    -{Math.round((1 - product.price / product.compare_price) * 100)}%
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Descripción */}
+            {product.description && (
+              <div className="mb-6 flex-1">
+                <p className="text-gray-600 leading-relaxed">{product.description}</p>
+              </div>
+            )}
+
+            {/* Stock (si aplica) */}
+            {product.track_inventory && (
+              <p className={`text-sm mb-4 ${product.stock_quantity > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                {product.stock_quantity > 0 
+                  ? `${product.stock_quantity} disponibles`
+                  : 'Sin stock'}
+              </p>
+            )}
+
+            {/* Botón agregar */}
+            <button
+              onClick={onAddToCart}
+              disabled={product.track_inventory && product.stock_quantity === 0}
+              className="w-full py-4 text-white font-semibold rounded-2xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: primaryColor }}
+            >
+              Agregar al carrito
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes slide-up {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out;
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// Drawer del carrito
+function CartDrawer({ cart, store, primaryColor, formatPrice, cartTotal, updateQuantity, removeFromCart, onClose, onCheckout }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Overlay */}
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Drawer */}
+      <div className="relative w-full max-w-md h-full bg-white shadow-2xl animate-slide-left flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <h2 className="text-lg font-bold text-gray-900">Tu carrito</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Items */}
+        <div className="flex-1 overflow-auto p-4">
+          {cart.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center">
+              <ShoppingBag className="w-16 h-16 text-gray-300 mb-4" />
+              <p className="text-gray-500">Tu carrito está vacío</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cart.map(item => (
+                <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
+                  {/* Imagen */}
+                  <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                    {item.main_image_url ? (
+                      <img 
+                        src={item.main_image_url} 
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package className="w-6 h-6 text-gray-400" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-gray-900 text-sm truncate">{item.name}</h4>
+                    <p className="text-sm font-bold" style={{ color: primaryColor }}>
+                      {formatPrice(item.price)}
+                    </p>
+                    
+                    {/* Controles de cantidad */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={() => updateQuantity(item.id, -1)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:bg-gray-100"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.id, 1)}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:bg-gray-100"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Subtotal y eliminar */}
+                  <div className="flex flex-col items-end justify-between">
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-500"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <span className="text-sm font-bold text-gray-900">
+                      {formatPrice(item.price * item.quantity)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer con total y botón */}
+        {cart.length > 0 && (
+          <div className="border-t border-gray-100 p-4 space-y-4">
+            {/* Total */}
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600">Total</span>
+              <span className="text-2xl font-bold text-gray-900">{formatPrice(cartTotal)}</span>
+            </div>
+
+            {/* Botón WhatsApp */}
+            <button
+              onClick={onCheckout}
+              className="w-full py-4 flex items-center justify-center gap-3 text-white font-semibold rounded-2xl transition-all hover:opacity-90 active:scale-[0.98]"
+              style={{ backgroundColor: '#25D366' }}
+            >
+              <MessageCircle className="w-5 h-5" />
+              Finalizar pedido por WhatsApp
+            </button>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes slide-left {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        .animate-slide-left {
+          animation: slide-left 0.3s ease-out;
+        }
+      `}</style>
+    </div>
+  )
+}
