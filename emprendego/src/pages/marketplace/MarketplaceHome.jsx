@@ -484,19 +484,22 @@ export default function MarketplaceHome() {
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
-              Más de 100 tiendas activas
+              Más de 100 tiendas activas en EmprendeGo
             </div>
             
+            {/* H1 Optimizado para Brand SEO */}
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 leading-tight mb-6">
-              Descubre tiendas locales y{' '}
+              EmprendeGo: Tu Tienda Digital para{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                compra por WhatsApp
+                Vender por WhatsApp
               </span>
             </h1>
             
+            {/* Párrafo introductorio SEO - Primera mención de marca */}
             <p className="text-lg md:text-xl text-slate-600 mb-8 max-w-2xl mx-auto">
-              Explora por ciudad, categoría o producto. Conecta directamente con emprendedores 
-              de tu zona y apoya el comercio local.
+              <strong>EmprendeGo</strong> es la plataforma donde emprendedores crean tiendas digitales 
+              profesionales y reciben pedidos por WhatsApp. Explora el marketplace, 
+              conecta con negocios locales y apoya el comercio de tu ciudad.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -798,34 +801,42 @@ export default function MarketplaceHome() {
       </section>
 
       {/* ============================================ */}
-      {/* FOOTER */}
+      {/* FOOTER - Optimizado para SEO */}
       {/* ============================================ */}
       <footer className="bg-slate-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
-            {/* Logo y descripción */}
+            {/* Logo y descripción - Brand SEO */}
             <div className="md:col-span-2">
               <div className="mb-4">
                 <BrandLogo size="md" variant="light" />
               </div>
               <p className="text-slate-400 max-w-sm">
-                La plataforma que conecta emprendedores con clientes. 
-                Crea tu tienda online y vende por WhatsApp.
+                <strong className="text-slate-300">EmprendeGo</strong> es la plataforma oficial para 
+                emprendedores en Colombia y Latinoamérica. Crea tu tienda digital profesional 
+                y recibe pedidos por WhatsApp. La solución #1 para vender online.
+              </p>
+              {/* Keywords semánticas ocultas para SEO */}
+              <p className="text-slate-500 text-xs mt-3">
+                EmprendeGo plataforma • Tiendas digitales WhatsApp • Catálogo online gratis
               </p>
             </div>
 
             {/* Enlaces */}
             <div>
-              <h4 className="font-semibold mb-4">Enlaces</h4>
+              <h4 className="font-semibold mb-4">EmprendeGo</h4>
               <ul className="space-y-2 text-slate-400">
                 <li>
-                  <a href="#" className="hover:text-white transition-colors">Inicio</a>
+                  <a href="/" className="hover:text-white transition-colors">Inicio</a>
                 </li>
                 <li>
                   <a href="#como-funciona" className="hover:text-white transition-colors">¿Cómo funciona?</a>
                 </li>
                 <li>
-                  <Link to="/auth/registro" className="hover:text-white transition-colors">Crear tienda</Link>
+                  <Link to="/vende" className="hover:text-white transition-colors">Vende con EmprendeGo</Link>
+                </li>
+                <li>
+                  <Link to="/auth/registro" className="hover:text-white transition-colors">Crear tienda gratis</Link>
                 </li>
               </ul>
             </div>
@@ -848,7 +859,8 @@ export default function MarketplaceHome() {
           </div>
 
           <div className="pt-8 border-t border-slate-800 text-center text-slate-500 text-sm">
-            © {new Date().getFullYear()} EmprendeGo. Todos los derechos reservados.
+            <p>© {new Date().getFullYear()} <strong>EmprendeGo</strong> — Plataforma de tiendas digitales.</p>
+            <p className="mt-1">Hecho con ❤️ para emprendedores de Colombia y Latinoamérica.</p>
           </div>
         </div>
       </footer>

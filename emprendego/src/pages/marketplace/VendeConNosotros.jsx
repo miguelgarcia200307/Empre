@@ -401,14 +401,15 @@ export default function VendeConNosotros() {
               </div>
 
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 leading-tight mb-6">
-                Vende por WhatsApp con una tienda que{' '}
+                EmprendeGo: Crea tu Tienda Digital y{' '}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                  se ve profesional
+                  Vende por WhatsApp
                 </span>
               </h1>
 
               <p className="text-lg md:text-xl text-slate-600 mb-8 max-w-xl mx-auto lg:mx-0">
-                Crea tu vitrina en minutos, comparte tu link o QR, y recibe pedidos por WhatsApp.
+                <strong>EmprendeGo</strong> es la plataforma para emprendedores que quieren vender online. 
+                Crea tu catálogo profesional en minutos, comparte tu link o QR, y recibe pedidos directo por WhatsApp. 
                 Sin comisiones, sin complicaciones.
               </p>
 
@@ -1082,25 +1083,30 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN K - FOOTER */}
+      {/* SECCIÓN K - FOOTER - Optimizado para SEO */}
       {/* ============================================ */}
       <footer className="bg-slate-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
-            {/* Logo y descripción */}
+            {/* Logo y descripción - Brand SEO */}
             <div className="md:col-span-2">
               <div className="mb-4">
                 <BrandLogo size="md" variant="light" linkToHome />
               </div>
               <p className="text-slate-400 text-sm max-w-md">
-                La plataforma para emprendedores que quieren vender por WhatsApp de forma
-                profesional. Crea tu tienda online gratis y empieza a crecer.
+                <strong className="text-slate-300">EmprendeGo</strong> es la plataforma oficial para 
+                emprendedores en Colombia y Latinoamérica. Crea tu tienda digital profesional y recibe 
+                pedidos por WhatsApp. La solución #1 para vender online sin complicaciones.
+              </p>
+              {/* Keywords semánticas para SEO */}
+              <p className="text-slate-600 text-xs mt-3">
+                EmprendeGo plataforma • Tiendas digitales Colombia • Vender por WhatsApp
               </p>
             </div>
 
             {/* Links rápidos */}
             <div>
-              <h4 className="font-semibold text-white mb-4">Enlaces</h4>
+              <h4 className="font-semibold text-white mb-4">EmprendeGo</h4>
               <ul className="space-y-2">
                 <li>
                   <Link
@@ -1161,10 +1167,13 @@ export default function VendeConNosotros() {
             </div>
           </div>
 
-          {/* Copyright */}
+          {/* Copyright - Brand SEO */}
           <div className="pt-8 border-t border-slate-800 text-center">
             <p className="text-slate-500 text-sm">
-              © {new Date().getFullYear()} EmprendeGo. Todos los derechos reservados.
+              © {new Date().getFullYear()} <strong>EmprendeGo</strong> — Plataforma de tiendas digitales para emprendedores.
+            </p>
+            <p className="text-slate-600 text-xs mt-1">
+              Hecho con ❤️ para emprendedores de Colombia y Latinoamérica.
             </p>
           </div>
         </div>

@@ -1,0 +1,40 @@
+# ==================================================
+# robots.txt para EmprendeGo
+# https://emprendego.shop
+# ==================================================
+
+# Permitir todos los crawlers en páginas públicas
+User-agent: *
+Allow: /
+Allow: /vende
+Allow: /tienda/
+
+# Bloquear rutas privadas y de administración
+Disallow: /panel
+Disallow: /panel/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /auth
+Disallow: /auth/
+Disallow: /onboarding
+Disallow: /onboarding/
+
+# Bloquear assets internos no relevantes
+Disallow: /src/
+Disallow: /*.json$
+
+# Permitir archivos importantes para SEO
+Allow: /sitemap.xml
+Allow: /robots.txt
+Allow: /logo.png
+Allow: /og-image.png
+Allow: /favicon.png
+
+# Sitemap location
+Sitemap: https://emprendego.shop/sitemap.xml
+
+# ==================================================
+# Crawl-delay recomendado (opcional)
+# ==================================================
+# User-agent: *
+# Crawl-delay: 1

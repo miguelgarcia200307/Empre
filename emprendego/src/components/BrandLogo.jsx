@@ -46,7 +46,7 @@ const BrandLogo = ({
     <div className={`flex items-center gap-2.5 ${className}`}>
       <img 
         src={logo} 
-        alt="EmprendeGo" 
+        alt="EmprendeGo - Plataforma de tiendas digitales para emprendedores" 
         className={`${sizeClasses[size]} object-contain rounded-xl`}
         onError={(e) => {
           // Fallback si la imagen no carga - mostrar iniciales

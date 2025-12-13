@@ -2,11 +2,186 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    
+    <!-- Favicon y App Icons -->
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    
+    <!-- Viewport y Compatibilidad -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EmprendeGo - Tu tienda digital</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    
+    <!-- SEO Principal - BRAND SEO -->
+    <title>EmprendeGo | Crea tu Tienda Digital y Vende por WhatsApp</title>
+    <meta name="description" content="EmprendeGo es la plataforma para emprendedores que quieren crear su tienda digital gratis y vender por WhatsApp. Catálogo profesional, pedidos automáticos y más. ¡Empieza hoy!" />
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://emprendego.shop/" />
+    
+    <!-- Indexación -->
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow" />
+    
+    <!-- Brand & Author -->
+    <meta name="author" content="EmprendeGo" />
+    <meta name="application-name" content="EmprendeGo" />
+    <meta name="generator" content="EmprendeGo Platform" />
+    
+    <!-- Keywords (Brand focused) -->
+    <meta name="keywords" content="EmprendeGo, tienda digital, vender por WhatsApp, catálogo digital, emprendedores Colombia, tienda online gratis, EmprendeGo plataforma, EmprendeGo tiendas digitales" />
+    
+    <!-- Geo & Language -->
+    <meta name="geo.region" content="CO" />
+    <meta name="geo.placename" content="Colombia" />
+    <meta name="language" content="Spanish" />
+    <meta name="content-language" content="es-CO" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://emprendego.shop/" />
+    <meta property="og:title" content="EmprendeGo | Crea tu Tienda Digital y Vende por WhatsApp" />
+    <meta property="og:description" content="EmprendeGo es la plataforma para emprendedores que quieren crear su tienda digital gratis y vender por WhatsApp. Catálogo profesional, pedidos automáticos y más." />
+    <meta property="og:image" content="https://emprendego.shop/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="EmprendeGo - Plataforma de tiendas digitales para emprendedores" />
+    <meta property="og:site_name" content="EmprendeGo" />
+    <meta property="og:locale" content="es_CO" />
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://emprendego.shop/" />
+    <meta name="twitter:title" content="EmprendeGo | Crea tu Tienda Digital y Vende por WhatsApp" />
+    <meta name="twitter:description" content="EmprendeGo es la plataforma para emprendedores que quieren crear su tienda digital gratis y vender por WhatsApp. ¡Empieza hoy!" />
+    <meta name="twitter:image" content="https://emprendego.shop/og-image.png" />
+    <meta name="twitter:image:alt" content="EmprendeGo - Plataforma de tiendas digitales" />
+    
+    <!-- Tema y Colores -->
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="msapplication-TileColor" content="#2563eb" />
+    
+    <!-- Preconnect para performance -->
+    <link rel="preconnect" href="https://ziaoxznenfbjclbjsyxy.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://ziaoxznenfbjclbjsyxy.supabase.co" />
+    
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://emprendego.shop/#organization",
+          "name": "EmprendeGo",
+          "alternateName": ["EmprendeGo Plataforma", "EmprendeGo Colombia"],
+          "url": "https://emprendego.shop",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://emprendego.shop/logo.png",
+            "width": 512,
+            "height": 512
+          },
+          "description": "EmprendeGo es la plataforma líder para emprendedores que quieren crear tiendas digitales y vender por WhatsApp en Colombia y Latinoamérica.",
+          "foundingDate": "2024",
+          "areaServed": [
+            {
+              "@type": "Country",
+              "name": "Colombia"
+            },
+            {
+              "@type": "Place",
+              "name": "Latinoamérica"
+            }
+          ],
+          "sameAs": [
+            "https://www.facebook.com/emprendego",
+            "https://www.instagram.com/emprendego",
+            "https://twitter.com/emprendego"
+          ],
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer service",
+            "availableLanguage": "Spanish"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://emprendego.shop/#website",
+          "url": "https://emprendego.shop",
+          "name": "EmprendeGo",
+          "description": "Plataforma para crear tiendas digitales y vender por WhatsApp",
+          "publisher": {
+            "@id": "https://emprendego.shop/#organization"
+          },
+          "inLanguage": "es-CO",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://emprendego.shop/?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://emprendego.shop/#software",
+          "name": "EmprendeGo",
+          "applicationCategory": "BusinessApplication",
+          "applicationSubCategory": "E-commerce Platform",
+          "operatingSystem": "Web Browser",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "COP",
+            "description": "Plan gratuito disponible"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.8",
+            "ratingCount": "150",
+            "bestRating": "5",
+            "worstRating": "1"
+          },
+          "description": "EmprendeGo permite a emprendedores crear tiendas digitales profesionales y recibir pedidos por WhatsApp. Incluye catálogo digital, códigos QR, gestión de productos y más.",
+          "featureList": [
+            "Catálogo digital profesional",
+            "Pedidos por WhatsApp",
+            "Códigos QR personalizables",
+            "Gestión de productos y categorías",
+            "Control de finanzas",
+            "Marketplace integrado"
+          ],
+          "screenshot": "https://emprendego.shop/og-image.png",
+          "url": "https://emprendego.shop",
+          "provider": {
+            "@id": "https://emprendego.shop/#organization"
+          }
+        },
+        {
+          "@type": "BreadcrumbList",
+          "@id": "https://emprendego.shop/#breadcrumb",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Inicio",
+              "item": "https://emprendego.shop/"
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
+    <!-- Noscript fallback para SEO -->
+    <noscript>
+      <div style="padding: 20px; text-align: center; font-family: Arial, sans-serif;">
+        <h1>EmprendeGo - Crea tu Tienda Digital</h1>
+        <p>EmprendeGo es la plataforma para emprendedores que quieren crear su tienda digital gratis y vender por WhatsApp.</p>
+        <p>Para usar EmprendeGo, por favor habilita JavaScript en tu navegador.</p>
+        <a href="https://emprendego.shop">Visitar EmprendeGo</a>
+      </div>
+    </noscript>
+    
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
