@@ -11,6 +11,10 @@ export default defineConfig({
     }),
   ],
   preview: {
-    allowedHosts: ['empre-4.onrender.com']
+    allowedHosts: [
+      'empre-4.onrender.com',
+      'emprendego.shop',
+      'www.emprendego.shop'
+    ]
   }
 })
