@@ -10,6 +10,12 @@ import {
   Badge,
   Skeleton,
 } from '../../components/ui'
+import { 
+  PlanCard, 
+  PlanCardSkeleton,
+  PLAN_ICONS,
+  PLAN_GRADIENTS,
+} from '../../components/plans'
 import {
   Check,
   X,
@@ -37,231 +43,6 @@ import {
 // Cambiar a true cuando se integre pasarela de pagos
 // ============================================
 const PAYMENTS_ENABLED = false
-
-// ============================================
-// COMPONENTES DE UI PARA PLANES
-// ============================================
-
-// Mapeo de iconos por slug de plan
-const PLAN_ICONS = {
-  gratis: Zap,
-  basico: TrendingUp,
-  emprendedor: Rocket,
-  pro: Crown,
-}
-
-// Gradientes por slug de plan
-const PLAN_GRADIENTS = {
-  gratis: 'bg-gray-100',
-  basico: 'bg-gradient-to-br from-emerald-500 to-teal-500',
-  emprendedor: 'bg-gradient-to-br from-blue-500 to-cyan-500',
-  pro: 'bg-gradient-to-br from-purple-500 to-blue-600',
-}
-
-// Componente para mostrar una característica incluida o no
-const FeatureItem = ({ included, children, highlight = false }) => (
-  <li className="flex items-start gap-3">
-    {included ? (
-      <div className={`mt-0.5 p-0.5 rounded-full ${highlight ? 'bg-purple-100' : 'bg-green-100'}`}>
-        <Check className={`w-3.5 h-3.5 ${highlight ? 'text-purple-600' : 'text-green-600'}`} />
-      </div>
-    ) : (
-      <div className="mt-0.5 p-0.5 rounded-full bg-gray-100">
-        <X className="w-3.5 h-3.5 text-gray-400" />
-      </div>
-    )}
-    <span className={included ? 'text-gray-700' : 'text-gray-400'}>
-      {children}
-    </span>
-  </li>
-)
-
-// Componente de tarjeta de plan dinámico
-const PlanCard = ({ 
-  plan, 
-  isCurrentPlan, 
-  isDiscontinued = false,
-  onSelect,
-  disabled = false,
-}) => {
-  const Icon = PLAN_ICONS[plan.slug] || Zap
-  const isUnlimited = (value) => value === -1
-
-  return (
-    <div className={`
-      relative rounded-2xl border-2 transition-all duration-200
-      ${isCurrentPlan 
-        ? 'border-blue-500 shadow-lg shadow-blue-100' 
-        : plan.isFeatured 
-          ? 'border-purple-300 shadow-lg shadow-purple-100'
-          : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
-      }
-      ${isDiscontinued ? 'opacity-75' : ''}
-      bg-white
-    `}>
-      {/* Badges */}
-      <div className="absolute -top-3 left-4 flex gap-2">
-        {isCurrentPlan && (
-          <Badge variant="blue">Tu plan</Badge>
-        )}
-        {isDiscontinued && isCurrentPlan && (
-          <Badge variant="amber">Descontinuado</Badge>
-        )}
-        {plan.isFeatured && !isCurrentPlan && (
-          <Badge variant="purple">Recomendado</Badge>
-        )}
-      </div>
-
-      <div className="p-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`p-2.5 rounded-xl ${PLAN_GRADIENTS[plan.slug] || 'bg-gray-100'}`}>
-            <Icon className={`w-5 h-5 ${plan.slug === 'gratis' ? 'text-gray-600' : 'text-white'}`} />
-          </div>
-          <div>
-            <h3 className="font-bold text-gray-900 text-lg">{plan.name}</h3>
-            {plan.description && (
-              <p className="text-xs text-gray-500">{plan.description}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Precio */}
-        <div className="mb-6">
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold text-gray-900">
-              {plan.price === 0 ? 'Gratis' : formatPrice(plan.price)}
-            </span>
-            {plan.price > 0 && (
-              <span className="text-gray-500 text-sm">/mes</span>
-            )}
-          </div>
-          {plan.price === 0 && (
-            <p className="text-xs text-gray-500 mt-1">Sin límite de tiempo</p>
-          )}
-        </div>
-
-        {/* Características principales */}
-        <ul className="space-y-3 mb-6 text-sm">
-          {/* Productos */}
-          <FeatureItem included={true}>
-            {isUnlimited(plan.maxProducts) 
-              ? <><strong className="text-purple-600">Productos ilimitados</strong></>
-              : <>Hasta <strong>{plan.maxProducts}</strong> productos</>
-            }
-          </FeatureItem>
-
-          {/* Plantillas */}
-          <FeatureItem included={true}>
-            {isUnlimited(plan.templates)
-              ? <><strong className="text-purple-600">Todas las plantillas</strong></>
-              : <>{plan.templates} plantilla{plan.templates > 1 ? 's' : ''}</>
-            }
-          </FeatureItem>
-
-          {/* WhatsApp */}
-          <FeatureItem included={plan.features?.whatsappButton}>
-            Botón de WhatsApp
-          </FeatureItem>
-
-          {/* QR Code */}
-          <FeatureItem included={plan.features?.qrCode}>
-            Código QR dinámico
-          </FeatureItem>
-
-          {/* Estadísticas */}
-          <FeatureItem included={plan.features?.advancedStats || plan.features?.basicStats}>
-            {plan.features?.advancedStats ? 'Estadísticas avanzadas' : 'Estadísticas básicas'}
-          </FeatureItem>
-
-          {/* IA */}
-          <FeatureItem included={plan.features?.ai}>
-            IA para descripciones
-          </FeatureItem>
-
-          {/* Finanzas */}
-          <FeatureItem included={plan.features?.finances}>
-            Módulo de finanzas
-          </FeatureItem>
-
-          {/* Recomendaciones */}
-          <FeatureItem included={plan.features?.recommendations}>
-            "Te puede interesar"
-          </FeatureItem>
-
-          {/* Multi-catálogo */}
-          <FeatureItem included={plan.features?.multiCatalog}>
-            Multi-catálogo
-          </FeatureItem>
-
-          {/* Marketplace priority */}
-          <FeatureItem included={true}>
-            Marketplace ({plan.marketplacePriority || 'baja'})
-          </FeatureItem>
-
-          {/* Remove branding */}
-          {plan.features?.removeBranding && (
-            <FeatureItem included={true} highlight>
-              Sin marca EmprendeGo
-            </FeatureItem>
-          )}
-
-          {/* Soporte prioritario */}
-          {plan.features?.prioritySupport && (
-            <FeatureItem included={true} highlight>
-              Soporte prioritario
-            </FeatureItem>
-          )}
-        </ul>
-
-        {/* CTA Button */}
-        {isCurrentPlan ? (
-          <Button 
-            variant="secondary" 
-            className="w-full" 
-            disabled
-          >
-            {isDiscontinued ? 'Plan actual (no disponible)' : 'Plan actual'}
-          </Button>
-        ) : (
-          <Button
-            className={`w-full ${
-              plan.slug === 'pro' 
-                ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700' 
-                : plan.slug === 'emprendedor'
-                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600'
-                  : ''
-            }`}
-            onClick={() => onSelect(plan)}
-            disabled={disabled}
-          >
-            {plan.price === 0 ? 'Cambiar a Gratis' : 'Mejorar plan'}
-          </Button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Skeleton para carga
-const PlanCardSkeleton = () => (
-  <div className="rounded-2xl border-2 border-gray-200 p-6 bg-white">
-    <div className="flex items-center gap-3 mb-4">
-      <Skeleton className="w-12 h-12 rounded-xl" />
-      <div>
-        <Skeleton className="w-24 h-5 mb-1" />
-        <Skeleton className="w-16 h-3" />
-      </div>
-    </div>
-    <Skeleton className="w-28 h-8 mb-6" />
-    <div className="space-y-3 mb-6">
-      {[...Array(6)].map((_, i) => (
-        <Skeleton key={i} className="w-full h-4" />
-      ))}
-    </div>
-    <Skeleton className="w-full h-10 rounded-lg" />
-  </div>
-)
 
 // ============================================
 // PÁGINA PRINCIPAL DE PLAN Y FACTURACIÓN
@@ -402,7 +183,7 @@ const Plan = () => {
         <Skeleton className="h-32 rounded-2xl" />
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {[...Array(4)].map((_, i) => (
-            <PlanCardSkeleton key={i} />
+            <PlanCardSkeleton key={i} variant="panel" />
           ))}
         </div>
       </div>
@@ -511,10 +292,12 @@ const Plan = () => {
             <PlanCard
               key={plan.dbId || plan.id}
               plan={plan}
+              variant="panel"
               isCurrentPlan={
                 displayPlan && 
                 (plan.slug === displayPlan.slug || plan.slug === displayPlan.id || plan.id === displayPlan.id)
               }
+              isDiscontinued={false}
               onSelect={handleSelectPlan}
             />
           ))}

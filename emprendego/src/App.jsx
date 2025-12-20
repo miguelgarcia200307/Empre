@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ScrollToTop } from './components/ScrollToTop'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { StoreProvider } from './hooks/useStore'
 import { ToastProvider } from './hooks/useToast'
@@ -40,7 +41,7 @@ import {
 import { TiendaPublica } from './pages/cliente'
 
 // Marketplace (público)
-import { MarketplaceHome, VendeConNosotros } from './pages/marketplace'
+import { MarketplaceHome, VendeConNosotros, Home } from './pages/marketplace'
 
 // Protected Route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -148,11 +149,14 @@ const OnboardingRoute = ({ children }) => {
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Marketplace público como HOME */}
-      <Route path="/" element={<MarketplaceHome />} />
+      {/* Landing Page como HOME */}
+      <Route path="/" element={<Home />} />
       
-      {/* Vende con nosotros - Landing */}
-      <Route path="/vende" element={<VendeConNosotros />} />
+      {/* Marketplace completo */}
+      <Route path="/marketplace" element={<MarketplaceHome />} />
+      
+      {/* Redirección de /vende a / para compatibilidad */}
+      <Route path="/vende" element={<Navigate to="/" replace />} />
       
       {/* Auth Routes */}
       <Route path="/auth" element={
@@ -225,6 +229,7 @@ const AppRoutes = () => {
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <ToastProvider>
         <AuthProvider>
           <StoreProvider>

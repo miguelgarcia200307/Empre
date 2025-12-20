@@ -5,8 +5,10 @@ const variants = {
   secondary: 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300',
   outline: 'border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300',
   ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+  'ghost-dark': 'bg-white/10 text-white border border-white/30 hover:bg-white/20 hover:border-white/40 active:bg-white/25 focus-visible:ring-4 focus-visible:ring-white/20 focus-visible:outline-none',
   danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
   success: 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800',
+  white: 'bg-white text-blue-600 hover:bg-blue-50 active:bg-blue-100 shadow-sm',
 }
 
 const sizes = {

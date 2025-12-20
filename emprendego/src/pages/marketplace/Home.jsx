@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { Button, Card, Badge, Accordion, Drawer, Skeleton, EmptyState } from '../../components/ui'
+import { PlanCard, PlanCardSkeleton } from '../../components/plans'
 import { usePlans } from '../../hooks/usePlans'
 import BrandLogo from '../../components/BrandLogo'
 import {
@@ -38,7 +39,8 @@ import {
 } from 'lucide-react'
 
 // ============================================
-// VENDE CON NOSOTROS - Landing Page Profesional
+// HOME - Landing Page Principal
+// Landing informativo con secciones de marketing
 // ============================================
 
 // Hook para animaciones al scroll (IntersectionObserver)
@@ -91,18 +93,24 @@ const AnimatedSection = ({ children, className = '', delay = 0 }) => {
   )
 }
 
-// Colores por plan
-const planColors = {
-  gratis: 'border-slate-200 bg-white',
-  basico: 'border-blue-200 bg-blue-50/30',
-  emprendedor: 'border-purple-200 bg-purple-50/30',
-  pro: 'border-amber-200 bg-amber-50/30',
-}
-
-export default function VendeConNosotros() {
+export default function Home() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { plans, loading: plansLoading, error: plansError, refetch: refetchPlans } = usePlans()
+
+  // Scroll a sección si viene con hash
+  useEffect(() => {
+    if (location.hash) {
+      const sectionId = location.hash.replace('#', '')
+      setTimeout(() => {
+        const element = document.getElementById(sectionId)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' })
+        }
+      }, 100)
+    }
+  }, [location.hash])
 
   // Scroll suave a sección
   const scrollToSection = (sectionId) => {
@@ -272,10 +280,10 @@ export default function VendeConNosotros() {
             {/* Navegación Desktop */}
             <nav className="hidden md:flex items-center gap-6">
               <Link
-                to="/"
+                to="/marketplace"
                 className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
               >
-                Inicio
+                Marketplace
               </Link>
               <button
                 onClick={() => scrollToSection('como-funciona')}
@@ -336,11 +344,11 @@ export default function VendeConNosotros() {
       >
         <nav className="flex flex-col gap-2">
           <Link
-            to="/"
+            to="/marketplace"
             onClick={() => setMobileMenuOpen(false)}
-            className="px-4 py-3 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors font-medium"
+            className="px-4 py-3 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors font-medium text-left"
           >
-            Inicio
+            Marketplace
           </Link>
           <button
             onClick={() => scrollToSection('como-funciona')}
@@ -384,7 +392,7 @@ export default function VendeConNosotros() {
       </Drawer>
 
       {/* ============================================ */}
-      {/* HERO - SECCIÓN A/B */}
+      {/* HERO */}
       {/* ============================================ */}
       <section className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50">
         {/* Patrón de fondo sutil */}
@@ -408,8 +416,8 @@ export default function VendeConNosotros() {
               </h1>
 
               <p className="text-lg md:text-xl text-slate-600 mb-8 max-w-xl mx-auto lg:mx-0">
-                <strong>EmprendeGo</strong> es la plataforma para emprendedores que quieren vender online. 
-                Crea tu catálogo profesional en minutos, comparte tu link o QR, y recibe pedidos directo por WhatsApp. 
+                <strong>EmprendeGo</strong> es la plataforma para emprendedores que quieren vender online.
+                Crea tu catálogo profesional en minutos, comparte tu link o QR, y recibe pedidos directo por WhatsApp.
                 Sin comisiones, sin complicaciones.
               </p>
 
@@ -427,10 +435,10 @@ export default function VendeConNosotros() {
                 <Button
                   size="lg"
                   variant="outline"
-                  onClick={() => scrollToSection('como-funciona')}
+                  onClick={() => navigate('/marketplace')}
                   className="w-full sm:w-auto"
                 >
-                  Ver cómo funciona
+                  Explorar tiendas
                 </Button>
               </div>
 
@@ -535,7 +543,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN C - PROBLEMA Y OPORTUNIDAD */}
+      {/* SECCIÓN - PROBLEMA Y OPORTUNIDAD */}
       {/* ============================================ */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -599,7 +607,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN D - CÓMO FUNCIONA */}
+      {/* SECCIÓN - CÓMO FUNCIONA */}
       {/* ============================================ */}
       <section id="como-funciona" className="py-16 md:py-24 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -655,7 +663,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN E - MÓDULOS ESTRELLA */}
+      {/* SECCIÓN - MÓDULOS ESTRELLA */}
       {/* ============================================ */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -704,7 +712,128 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN F - EMPIEZA GRATIS (PERSUASIVO) */}
+      {/* SECCIÓN - MARKETPLACE INFORMATIVO */}
+      {/* ============================================ */}
+      <section id="marketplace" className="py-16 md:py-24 bg-slate-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+            {/* Contenido de texto */}
+            <AnimatedSection>
+              <div>
+                <Badge variant="blue" size="lg" className="mb-4">
+                  Visibilidad para tu negocio
+                </Badge>
+                <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-6">
+                  Marketplace público de EmprendeGo
+                </h2>
+                <p className="text-lg text-slate-600 mb-8">
+                  EmprendeGo incluye un marketplace donde cualquier cliente puede descubrir negocios locales 
+                  y comprar por WhatsApp. Los emprendedores ganan visibilidad y llegan a más personas sin complicaciones.
+                </p>
+
+                {/* Beneficios */}
+                <ul className="space-y-4 mb-8">
+                  <li className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Target className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">Segmenta por ciudad</p>
+                      <p className="text-sm text-slate-600">Encuentra clientes cerca de ti y aparece en búsquedas locales.</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Globe className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">Vitrina pública</p>
+                      <p className="text-sm text-slate-600">Aparece en una vitrina pública para aumentar tus visitas y ventas.</p>
+                    </div>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <MessageCircle className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">Pedidos por WhatsApp</p>
+                      <p className="text-sm text-slate-600">Clientes exploran, eligen y te escriben directo por WhatsApp.</p>
+                    </div>
+                  </li>
+                </ul>
+
+                {/* CTA */}
+                <Button
+                  size="lg"
+                  variant="primary"
+                  onClick={() => navigate('/marketplace')}
+                  className="group"
+                >
+                  <Store className="w-5 h-5 mr-2" />
+                  Ver Marketplace
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </div>
+            </AnimatedSection>
+
+            {/* Ilustración / Visual */}
+            <AnimatedSection delay={200}>
+              <div className="relative">
+                {/* Card mockup del marketplace */}
+                <div className="bg-white rounded-3xl shadow-xl border border-slate-200 p-6 md:p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                      <Store className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900">Marketplace EmprendeGo</h3>
+                      <p className="text-sm text-slate-500">Descubre tiendas locales</p>
+                    </div>
+                  </div>
+
+                  {/* Mini cards de tiendas simuladas */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    {[
+                      { name: 'Tienda Artesanal', city: 'Bogotá', color: 'from-amber-400 to-orange-500' },
+                      { name: 'Moda Express', city: 'Medellín', color: 'from-pink-400 to-rose-500' },
+                      { name: 'Tech Store', city: 'Cali', color: 'from-blue-400 to-cyan-500' },
+                      { name: 'Delicias Café', city: 'Barranquilla', color: 'from-green-400 to-emerald-500' },
+                    ].map((tienda, i) => (
+                      <div key={i} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                        <div className={`w-full h-12 bg-gradient-to-br ${tienda.color} rounded-lg mb-2`} />
+                        <p className="text-xs font-medium text-slate-700 truncate">{tienda.name}</p>
+                        <p className="text-xs text-slate-500">{tienda.city}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Barra de búsqueda simulada */}
+                  <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-4 py-3">
+                    <Target className="w-4 h-4 text-slate-400" />
+                    <span className="text-sm text-slate-400">Buscar por ciudad o categoría...</span>
+                  </div>
+                </div>
+
+                {/* Decoración flotante */}
+                <div className="absolute -top-4 -right-4 bg-white rounded-2xl shadow-lg p-3 border border-slate-100 hidden sm:block">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                      <TrendingUp className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">Tiendas activas</p>
+                      <p className="text-sm font-bold text-slate-900">+100</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </AnimatedSection>
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================ */}
+      {/* SECCIÓN - EMPIEZA GRATIS (PERSUASIVO) */}
       {/* ============================================ */}
       <section className="py-16 md:py-24 bg-gradient-to-br from-blue-50 via-white to-purple-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -758,7 +887,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN G - PLANES DINÁMICOS */}
+      {/* SECCIÓN - PLANES DINÁMICOS */}
       {/* ============================================ */}
       <section id="planes" className="py-16 md:py-24 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -780,17 +909,7 @@ export default function VendeConNosotros() {
           {plansLoading && (
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="bg-white rounded-2xl border border-slate-200 p-6">
-                  <Skeleton variant="text" className="w-20 h-6 mb-2" />
-                  <Skeleton variant="title" className="w-32 h-10 mb-4" />
-                  <Skeleton variant="text" className="w-full mb-6" />
-                  <div className="space-y-3 mb-6">
-                    {[1, 2, 3, 4].map((j) => (
-                      <Skeleton key={j} variant="text" className="w-full" />
-                    ))}
-                  </div>
-                  <Skeleton variant="button" className="w-full" />
-                </div>
+                <PlanCardSkeleton key={i} variant="public" />
               ))}
             </div>
           )}
@@ -811,121 +930,12 @@ export default function VendeConNosotros() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {plans.map((plan, index) => (
                 <AnimatedSection key={plan.id} delay={index * 100}>
-                  <div
-                    className={`relative rounded-2xl border-2 p-6 h-full flex flex-col transition-all duration-300 hover:shadow-xl ${
-                      plan.isFeatured
-                        ? 'border-blue-500 bg-blue-50/30 shadow-lg scale-[1.02]'
-                        : planColors[plan.slug] || 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    {/* Featured badge */}
-                    {plan.isFeatured && (
-                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold rounded-full shadow-lg">
-                        Más popular
-                      </div>
-                    )}
-
-                    {/* Plan header */}
-                    <div className="mb-4">
-                      <Badge
-                        variant={
-                          plan.slug === 'pro'
-                            ? 'amber'
-                            : plan.slug === 'emprendedor'
-                            ? 'purple'
-                            : plan.slug === 'basico'
-                            ? 'blue'
-                            : 'default'
-                        }
-                        size="md"
-                        className="mb-3"
-                      >
-                        {plan.name}
-                      </Badge>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl md:text-4xl font-bold text-slate-900">
-                          {plan.price === 0 ? 'Gratis' : `$${plan.price.toLocaleString()}`}
-                        </span>
-                        {plan.price > 0 && (
-                          <span className="text-slate-500 text-sm">/mes</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    {plan.description && (
-                      <p className="text-sm text-slate-600 mb-4">{plan.description}</p>
-                    )}
-
-                    {/* Features list */}
-                    <ul className="space-y-3 mb-6 flex-grow">
-                      <li className="flex items-center gap-2 text-sm text-slate-700">
-                        <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        <span>
-                          {plan.maxProducts === -1
-                            ? 'Productos ilimitados'
-                            : `Hasta ${plan.maxProducts} productos`}
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2 text-sm text-slate-700">
-                        <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        <span>
-                          {plan.maxCategories === -1
-                            ? 'Categorías ilimitadas'
-                            : `Hasta ${plan.maxCategories} categorías`}
-                        </span>
-                      </li>
-                      {plan.templates > 0 && (
-                        <li className="flex items-center gap-2 text-sm text-slate-700">
-                          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          <span>{plan.templates} plantillas</span>
-                        </li>
-                      )}
-                      <li className="flex items-center gap-2 text-sm text-slate-700">
-                        <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        <span>Pedidos por WhatsApp</span>
-                      </li>
-                      {plan.features?.qr && (
-                        <li className="flex items-center gap-2 text-sm text-slate-700">
-                          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          <span>Código QR personalizado</span>
-                        </li>
-                      )}
-                      {plan.features?.ai && (
-                        <li className="flex items-center gap-2 text-sm text-slate-700">
-                          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          <span>IA para publicaciones</span>
-                        </li>
-                      )}
-                      {plan.features?.finances && (
-                        <li className="flex items-center gap-2 text-sm text-slate-700">
-                          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          <span>Control de finanzas</span>
-                        </li>
-                      )}
-                      {plan.features?.analytics && (
-                        <li className="flex items-center gap-2 text-sm text-slate-700">
-                          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                          <span>Estadísticas avanzadas</span>
-                        </li>
-                      )}
-                    </ul>
-
-                    {/* CTA */}
-                    <Button
-                      variant={plan.isFeatured ? 'primary' : 'secondary'}
-                      className="w-full"
-                      onClick={() => navigate('/auth/registro')}
-                    >
-                      {plan.price === 0 ? 'Empezar gratis' : 'Empezar'}
-                    </Button>
-
-                    {plan.price > 0 && (
-                      <p className="text-xs text-slate-500 text-center mt-3">
-                        Empieza gratis y actualiza cuando quieras
-                      </p>
-                    )}
-                  </div>
+                  <PlanCard
+                    plan={plan}
+                    variant="public"
+                    onCtaClick={() => navigate('/auth/registro')}
+                    delay={0}
+                  />
                 </AnimatedSection>
               ))}
             </div>
@@ -934,7 +944,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN H - COMPARACIÓN ANTES VS DESPUÉS */}
+      {/* SECCIÓN - COMPARACIÓN ANTES VS DESPUÉS */}
       {/* ============================================ */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -993,7 +1003,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN I - FAQ */}
+      {/* SECCIÓN - FAQ */}
       {/* ============================================ */}
       <section id="faq" className="py-16 md:py-24 bg-slate-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1032,7 +1042,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN J - CTA FINAL */}
+      {/* SECCIÓN - CTA FINAL */}
       {/* ============================================ */}
       <section className="py-16 md:py-24 bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 relative overflow-hidden">
         {/* Decoración de fondo */}
@@ -1074,9 +1084,9 @@ export default function VendeConNosotros() {
                 size="lg"
                 variant="ghost-dark"
                 className="w-full sm:w-auto"
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/marketplace')}
               >
-                Volver al Marketplace
+                Ver Marketplace
               </Button>
             </div>
           </AnimatedSection>
@@ -1084,7 +1094,7 @@ export default function VendeConNosotros() {
       </section>
 
       {/* ============================================ */}
-      {/* SECCIÓN K - FOOTER - Optimizado para SEO */}
+      {/* FOOTER - Optimizado para SEO */}
       {/* ============================================ */}
       <footer className="bg-slate-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1095,8 +1105,8 @@ export default function VendeConNosotros() {
                 <BrandLogo size="md" variant="light" linkToHome />
               </div>
               <p className="text-slate-400 text-sm max-w-md">
-                <strong className="text-slate-300">EmprendeGo</strong> es la plataforma oficial para 
-                emprendedores en Colombia y Latinoamérica. Crea tu tienda digital profesional y recibe 
+                <strong className="text-slate-300">EmprendeGo</strong> es la plataforma oficial para
+                emprendedores en Colombia y Latinoamérica. Crea tu tienda digital profesional y recibe
                 pedidos por WhatsApp. La solución #1 para vender online sin complicaciones.
               </p>
               {/* Keywords semánticas para SEO */}
@@ -1111,7 +1121,7 @@ export default function VendeConNosotros() {
               <ul className="space-y-2">
                 <li>
                   <Link
-                    to="/"
+                    to="/marketplace"
                     className="text-slate-400 hover:text-white text-sm transition-colors"
                   >
                     Marketplace

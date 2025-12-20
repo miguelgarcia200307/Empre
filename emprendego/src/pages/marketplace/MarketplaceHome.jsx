@@ -1,60 +1,29 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
-import BrandLogo from '../../components/BrandLogo'
+import { Button, Drawer } from '../../components/ui'
+import { Store } from 'lucide-react'
+
+// Componentes del Marketplace
 import {
-  Button,
-  Input,
-  Select,
-  Card,
-  EmptyState,
-  Pagination,
-  Skeleton,
-  Drawer,
-} from '../../components/ui'
-import {
-  Store,
-  Search,
-  X,
-  MapPin,
-  Tag,
-  Star,
-  ChevronRight,
-  Menu,
-  Sparkles,
-  ShoppingBag,
-  Rocket,
-  Users,
-  Zap,
-  ArrowRight,
-  ExternalLink,
-  Filter,
-  RefreshCw,
-  AlertCircle,
-  Heart,
-  Globe,
-} from 'lucide-react'
+  MarketplaceHeader,
+  MarketplaceHero,
+  MarketplaceFiltersBar,
+  FeaturedStoresSection,
+  StoresGrid,
+  MarketplaceCTA,
+  MarketplaceFooter,
+  CategoryChips,
+  FilterChips,
+  MobileFiltersDrawer,
+} from './components'
 
 // ============================================
-// CONSTANTES Y HELPERS
+// CONSTANTES
 // ============================================
 
 const ITEMS_PER_PAGE = 12
-
-// Mapeo de colores por plan (similar a AdminMarketplace.jsx)
-const planColors = {
-  gratis: 'bg-slate-100 text-slate-700',
-  basico: 'bg-blue-100 text-blue-700',
-  emprendedor: 'bg-purple-100 text-purple-700',
-  pro: 'bg-amber-100 text-amber-700',
-}
-
-const planLabels = {
-  gratis: 'Gratis',
-  basico: 'Básico',
-  emprendedor: 'Emprendedor',
-  pro: 'Pro',
-}
+const FAVORITES_KEY = 'emprendego_favorites'
 
 // Prioridad de planes para ordenamiento
 const planPriority = {
@@ -87,8 +56,36 @@ export default function MarketplaceHome() {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
 
-  // Estado para menú móvil
+  // Estados nuevos de UI
+  const [sortBy, setSortBy] = useState('relevance')
+  const [viewMode, setViewMode] = useState('grid')
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Favoritos (localStorage)
+  const [favorites, setFavorites] = useState(() => {
+    try {
+      const saved = localStorage.getItem(FAVORITES_KEY)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+
+  // Persistir favoritos
+  useEffect(() => {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites))
+  }, [favorites])
+
+  // Toggle favorito
+  const handleToggleFavorite = useCallback((storeId) => {
+    setFavorites(prev => 
+      prev.includes(storeId)
+        ? prev.filter(id => id !== storeId)
+        : [...prev, storeId]
+    )
+  }, [])
 
   // Debounce para búsqueda
   useEffect(() => {
@@ -102,10 +99,10 @@ export default function MarketplaceHome() {
   // Reset página al cambiar filtros
   useEffect(() => {
     setCurrentPage(1)
-  }, [selectedCity, selectedCategory])
+  }, [selectedCity, selectedCategory, sortBy, showFavoritesOnly])
 
   // ============================================
-  // CARGA DE DATOS
+  // CARGA DE DATOS (SIN CAMBIOS EN LÓGICA)
   // ============================================
 
   const fetchData = useCallback(async () => {
@@ -129,7 +126,7 @@ export default function MarketplaceHome() {
       // 2. Obtener tiendas activas y visibles
       let storesQuery = supabase
         .from('stores')
-        .select('id, name, slug, logo_url, banner_url, city, plan, total_views, is_active, marketplace_hidden, moderation_status')
+        .select('id, name, slug, logo_url, banner_url, city, plan, total_views, is_active, marketplace_hidden, moderation_status, created_at')
         .eq('is_active', true)
 
       const { data: storesData, error: storesError } = await storesQuery
@@ -187,7 +184,8 @@ export default function MarketplaceHome() {
             total_views,
             is_active,
             marketplace_hidden,
-            moderation_status
+            moderation_status,
+            created_at
           )
         `)
         .order('sort_order', { ascending: true })
@@ -217,7 +215,7 @@ export default function MarketplaceHome() {
   }, [fetchData])
 
   // ============================================
-  // BÚSQUEDA Y FILTRADO
+  // BÚSQUEDA Y FILTRADO (SIN CAMBIOS EN LÓGICA)
   // ============================================
 
   const [searchResults, setSearchResults] = useState(null)
@@ -289,10 +287,6 @@ export default function MarketplaceHome() {
       result = result.filter(store => store.city === selectedCity)
     }
 
-    // Filtro por categoría (necesita buscar en categorías de la tienda)
-    // Este filtro se aplica solo si hay una categoría seleccionada
-    // Se manejará de forma asíncrona
-
     return result
   }, [stores, searchResults, selectedCity])
 
@@ -324,16 +318,39 @@ export default function MarketplaceHome() {
     filterByCategory()
   }, [selectedCategory])
 
-  // Combinar filtros
+  // Combinar filtros + ordenamiento frontend
   const finalFilteredStores = useMemo(() => {
     let result = filteredStores
 
+    // Filtro por categoría
     if (categoryFilteredStores !== null) {
       result = result.filter(store => categoryFilteredStores.has(store.id))
     }
 
+    // Filtro por favoritos
+    if (showFavoritesOnly) {
+      result = result.filter(store => favorites.includes(store.id))
+    }
+
+    // Ordenamiento frontend
+    switch (sortBy) {
+      case 'name-asc':
+        result = [...result].sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        break
+      case 'name-desc':
+        result = [...result].sort((a, b) => (b.name || '').localeCompare(a.name || ''))
+        break
+      case 'views':
+        result = [...result].sort((a, b) => (b.total_views || 0) - (a.total_views || 0))
+        break
+      case 'plan':
+        result = [...result].sort((a, b) => (planPriority[a.plan] || 4) - (planPriority[b.plan] || 4))
+        break
+      // 'relevance' mantiene el orden original
+    }
+
     return result
-  }, [filteredStores, categoryFilteredStores])
+  }, [filteredStores, categoryFilteredStores, sortBy, showFavoritesOnly, favorites])
 
   // Paginación
   const totalPages = Math.ceil(finalFilteredStores.length / ITEMS_PER_PAGE)
@@ -343,14 +360,17 @@ export default function MarketplaceHome() {
   )
 
   // Verificar si hay filtros activos
-  const hasActiveFilters = searchQuery || selectedCity || selectedCategory
+  const hasActiveFilters = searchQuery || selectedCity || selectedCategory || (sortBy !== 'relevance') || showFavoritesOnly
+  const activeFiltersCount = [searchQuery, selectedCity, selectedCategory, sortBy !== 'relevance' && sortBy, showFavoritesOnly].filter(Boolean).length
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSearchQuery('')
     setSelectedCity('')
     setSelectedCategory('')
+    setSortBy('relevance')
+    setShowFavoritesOnly(false)
     setCurrentPage(1)
-  }
+  }, [])
 
   // ============================================
   // RENDERIZADO
@@ -379,56 +399,13 @@ export default function MarketplaceHome() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* ============================================ */}
-      {/* HEADER */}
-      {/* ============================================ */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <BrandLogo size="md" linkToHome />
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Header */}
+      <MarketplaceHeader 
+        onMobileMenuOpen={() => setMobileMenuOpen(true)} 
+      />
 
-            {/* Navegación Desktop */}
-            <nav className="hidden md:flex items-center gap-8">
-              <a href="#" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                Inicio
-              </a>
-              <a href="#como-funciona" className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                ¿Cómo funciona?
-              </a>
-            </nav>
-
-            {/* Botones Desktop */}
-            <div className="hidden md:flex items-center gap-3">
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => navigate('/auth/login')}
-              >
-                Ingresar
-              </Button>
-              <Button 
-                variant="primary" 
-                size="sm"
-                onClick={() => navigate('/auth/registro')}
-              >
-                Registrarse
-              </Button>
-            </div>
-
-            {/* Menú Móvil Trigger */}
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 -mr-2 rounded-xl text-slate-600 hover:bg-slate-100 transition-colors"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Drawer Menú Móvil */}
+      {/* Mobile Menu Drawer */}
       <Drawer
         isOpen={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
@@ -437,21 +414,6 @@ export default function MarketplaceHome() {
         size="sm"
       >
         <nav className="flex flex-col gap-2">
-          <a 
-            href="#" 
-            onClick={() => setMobileMenuOpen(false)}
-            className="px-4 py-3 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors font-medium"
-          >
-            Inicio
-          </a>
-          <a 
-            href="#como-funciona" 
-            onClick={() => setMobileMenuOpen(false)}
-            className="px-4 py-3 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors font-medium"
-          >
-            ¿Cómo funciona?
-          </a>
-          <hr className="my-2 border-slate-200" />
           <Button 
             variant="ghost" 
             className="justify-start"
@@ -469,503 +431,129 @@ export default function MarketplaceHome() {
               navigate('/auth/registro')
             }}
           >
-            Registrarse
+            Crear tienda
           </Button>
         </nav>
       </Drawer>
 
-      {/* ============================================ */}
-      {/* HERO */}
-      {/* ============================================ */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%239C92AC%22%20fill-opacity%3D%220.03%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E')] opacity-50" />
-        
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
-          <div className="text-center max-w-3xl mx-auto">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-6">
-              <Sparkles className="w-4 h-4" />
-              Más de 100 tiendas activas en EmprendeGo
-            </div>
-            
-            {/* H1 Optimizado para Brand SEO */}
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 leading-tight mb-6">
-              EmprendeGo: Tu Tienda Digital para{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-                Vender por WhatsApp
-              </span>
-            </h1>
-            
-            {/* Párrafo introductorio SEO - Primera mención de marca */}
-            <p className="text-lg md:text-xl text-slate-600 mb-8 max-w-2xl mx-auto">
-              <strong>EmprendeGo</strong> es la plataforma donde emprendedores crean tiendas digitales 
-              profesionales y reciben pedidos por WhatsApp. Explora el marketplace, 
-              conecta con negocios locales y apoya el comercio de tu ciudad.
-            </p>
+      {/* Hero */}
+      <MarketplaceHero 
+        storeCount={stores.length}
+        isLoading={loading}
+      />
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button 
-                size="lg" 
-                variant="primary"
-                icon={Rocket}
-                onClick={() => navigate('/vende')}
-              >
-                Vende con EmprendeGo
-              </Button>
-              <Button 
-                size="lg" 
-                variant="outline"
-                onClick={() => document.getElementById('tiendas')?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Explorar tiendas
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================ */}
-      {/* CÓMO FUNCIONA */}
-      {/* ============================================ */}
-      <section id="como-funciona" className="py-16 md:py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-              ¿Cómo funciona?
-            </h2>
-            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              Comprar nunca fue tan fácil. En tres simples pasos conectas con emprendedores locales.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: Search,
-                title: 'Explora',
-                description: 'Busca productos, categorías o tiendas. Filtra por ciudad para encontrar lo que necesitas cerca de ti.'
-              },
-              {
-                icon: Heart,
-                title: 'Elige',
-                description: 'Descubre tiendas con productos increíbles. Mira catálogos completos y elige tus favoritos.'
-              },
-              {
-                icon: ShoppingBag,
-                title: 'Compra',
-                description: 'Contacta al emprendedor por WhatsApp y coordina tu compra de forma directa y segura.'
-              }
-            ].map((step, index) => (
-              <div key={index} className="text-center p-6">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                  <step.icon className="w-8 h-8 text-blue-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-slate-900 mb-3">{step.title}</h3>
-                <p className="text-slate-600">{step.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================ */}
-      {/* DESTACADOS */}
-      {/* ============================================ */}
-      {!loading && featuredStores.length > 0 && (
-        <section className="py-12 md:py-16 bg-gradient-to-br from-amber-50 to-orange-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                <Star className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-slate-900">Tiendas destacadas</h2>
-                <p className="text-slate-600">Las mejores seleccionadas para ti</p>
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {featuredStores.map((featured) => (
-                <StoreCard 
-                  key={featured.id} 
-                  store={featured.stores} 
-                  featured
-                />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ============================================ */}
-      {/* BUSCADOR Y FILTROS */}
-      {/* ============================================ */}
-      <section id="tiendas" className="py-12 md:py-16 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Título */}
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-slate-900 mb-3">Explora todas las tiendas</h2>
-            <p className="text-slate-600">Encuentra lo que buscas entre {stores.length} tiendas activas</p>
-          </div>
-
-          {/* Barra de búsqueda y filtros */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 md:p-6 shadow-sm mb-8">
-            <div className="grid md:grid-cols-4 gap-4">
-              {/* Input búsqueda */}
-              <div className="md:col-span-2 relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Busca un producto, categoría o tienda..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full transition-colors"
-                  >
-                    <X className="w-4 h-4 text-slate-400" />
-                  </button>
-                )}
-              </div>
-
-              {/* Select ciudad */}
-              <Select
-                placeholder="Todas las ciudades"
-                value={selectedCity}
-                onChange={(e) => setSelectedCity(e.target.value)}
-                options={[
-                  { value: '', label: 'Todas las ciudades' },
-                  ...cities.map(city => ({ value: city, label: city }))
-                ]}
-              />
-
-              {/* Select categoría */}
-              <Select
-                placeholder="Todas las categorías"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                options={[
-                  { value: '', label: 'Todas las categorías' },
-                  ...categories.map(cat => ({ value: cat, label: cat }))
-                ]}
-              />
-            </div>
-
-            {/* Filtros activos */}
-            {hasActiveFilters && (
-              <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-100">
-                <span className="text-sm text-slate-500">
-                  {finalFilteredStores.length} resultado{finalFilteredStores.length !== 1 ? 's' : ''}
-                </span>
-                <button
-                  onClick={clearFilters}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                  Limpiar filtros
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Grid de tiendas */}
-          {loading ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <StoreCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : error ? (
-            <EmptyState
-              icon={AlertCircle}
-              title="Error al cargar"
-              description={error}
-              action={fetchData}
-              actionLabel="Reintentar"
+      {/* Contenido principal */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        {/* Chips de categorías rápidas */}
+        {categories.length > 0 && !loading && (
+          <div className="mb-6">
+            <CategoryChips
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
             />
-          ) : paginatedStores.length === 0 ? (
-            <EmptyState
-              icon={Search}
-              title="No encontramos resultados"
-              description={
-                hasActiveFilters
-                  ? "Prueba con otros términos de búsqueda o ajusta los filtros"
-                  : "Aún no hay tiendas disponibles"
-              }
-              action={hasActiveFilters ? clearFilters : undefined}
-              actionLabel={hasActiveFilters ? "Limpiar filtros" : undefined}
-            />
-          ) : (
-            <>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {paginatedStores.map((store) => (
-                  <StoreCard key={store.id} store={store} />
-                ))}
-              </div>
-
-              {/* Paginación */}
-              {totalPages > 1 && (
-                <div className="mt-8">
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    totalItems={finalFilteredStores.length}
-                    itemsPerPage={ITEMS_PER_PAGE}
-                    onPageChange={setCurrentPage}
-                  />
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* ============================================ */}
-      {/* CTA - VENDE CON NOSOTROS */}
-      {/* ============================================ */}
-      <section id="vende-con-nosotros" className="py-16 md:py-24 bg-gradient-to-br from-blue-600 via-blue-700 to-purple-700 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23ffffff%22%20fill-opacity%3D%220.05%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E')] opacity-50" />
-        
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-full text-sm font-medium mb-6">
-                <Zap className="w-4 h-4" />
-                ¡Empieza GRATIS!
-              </div>
-              
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white leading-tight mb-6">
-                Vende con nosotros y llega a más clientes
-              </h2>
-              
-              <p className="text-lg text-blue-100 mb-8">
-                Crea tu tienda en minutos y empieza a vender por WhatsApp. 
-                Sin comisiones, sin complicaciones. Tu negocio, tus reglas.
-              </p>
-
-              <ul className="space-y-4 mb-8">
-                {[
-                  'Catálogo de productos ilimitado',
-                  'Pedidos directos por WhatsApp',
-                  'Tu propia URL personalizada',
-                  'Panel de control fácil de usar'
-                ].map((feature, index) => (
-                  <li key={index} className="flex items-center gap-3 text-white">
-                    <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button 
-                  size="lg"
-                  className="bg-white text-blue-600 hover:bg-blue-50"
-                  onClick={() => navigate('/auth/registro')}
-                >
-                  Registrarme ahora
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-                <Button 
-                  size="lg"
-                  variant="ghost"
-                  className="text-white hover:bg-white/10"
-                  onClick={() => navigate('/vende')}
-                >
-                  Más información
-                </Button>
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-6">
-              {[
-                { value: '100+', label: 'Tiendas activas', icon: Store },
-                { value: '1K+', label: 'Productos', icon: ShoppingBag },
-                { value: '500+', label: 'Pedidos mensuales', icon: Rocket },
-                { value: '10+', label: 'Ciudades', icon: Globe },
-              ].map((stat, index) => (
-                <div key={index} className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 text-center">
-                  <stat.icon className="w-8 h-8 text-white/80 mx-auto mb-3" />
-                  <div className="text-3xl md:text-4xl font-bold text-white mb-1">{stat.value}</div>
-                  <div className="text-blue-100 text-sm">{stat.label}</div>
-                </div>
-              ))}
-            </div>
           </div>
-        </div>
-      </section>
+        )}
 
-      {/* ============================================ */}
-      {/* FOOTER - Optimizado para SEO */}
-      {/* ============================================ */}
-      <footer className="bg-slate-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            {/* Logo y descripción - Brand SEO */}
-            <div className="md:col-span-2">
-              <div className="mb-4">
-                <BrandLogo size="md" variant="light" />
-              </div>
-              <p className="text-slate-400 max-w-sm">
-                <strong className="text-slate-300">EmprendeGo</strong> es la plataforma oficial para 
-                emprendedores en Colombia y Latinoamérica. Crea tu tienda digital profesional 
-                y recibe pedidos por WhatsApp. La solución #1 para vender online.
-              </p>
-              {/* Keywords semánticas ocultas para SEO */}
-              <p className="text-slate-500 text-xs mt-3">
-                EmprendeGo plataforma • Tiendas digitales WhatsApp • Catálogo online gratis
-              </p>
-            </div>
-
-            {/* Enlaces */}
-            <div>
-              <h4 className="font-semibold mb-4">EmprendeGo</h4>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="/" className="hover:text-white transition-colors">Inicio</a>
-                </li>
-                <li>
-                  <a href="#como-funciona" className="hover:text-white transition-colors">¿Cómo funciona?</a>
-                </li>
-                <li>
-                  <Link to="/vende" className="hover:text-white transition-colors">Vende con EmprendeGo</Link>
-                </li>
-                <li>
-                  <Link to="/auth/registro" className="hover:text-white transition-colors">Crear tienda gratis</Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Legal */}
-            <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">Términos de uso</a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">Privacidad</a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">Soporte</a>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="pt-8 border-t border-slate-800 text-center text-slate-500 text-sm">
-            <p>© {new Date().getFullYear()} <strong>EmprendeGo</strong> — Plataforma de tiendas digitales.</p>
-            <p className="mt-1">Hecho con ❤️ para emprendedores de Colombia y Latinoamérica.</p>
-          </div>
-        </div>
-      </footer>
-    </div>
-  )
-}
-
-// ============================================
-// COMPONENTES AUXILIARES
-// ============================================
-
-// Card de tienda
-function StoreCard({ store, featured = false }) {
-  const navigate = useNavigate()
-
-  if (!store) return null
-
-  return (
-    <Card
-      hover
-      onClick={() => navigate(`/tienda/${store.slug}`)}
-      className={`overflow-hidden ${featured ? 'ring-2 ring-amber-400' : ''}`}
-      padding="none"
-    >
-      {/* Banner / Cover */}
-      <div className="relative h-32 bg-gradient-to-br from-slate-100 to-slate-200">
-        {store.banner_url ? (
-          <img 
-            src={store.banner_url} 
-            alt=""
-            className="w-full h-full object-cover"
+        {/* Barra de filtros */}
+        <div className="mb-6">
+          <MarketplaceFiltersBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            searchLoading={searchLoading}
+            selectedCity={selectedCity}
+            onCityChange={setSelectedCity}
+            selectedCategory={selectedCategory}
+            onCategoryChange={setSelectedCategory}
+            cities={cities}
+            categories={categories}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            showFavoritesOnly={showFavoritesOnly}
+            onFavoritesToggle={() => setShowFavoritesOnly(!showFavoritesOnly)}
+            favoritesCount={favorites.length}
+            activeFiltersCount={activeFiltersCount}
+            onOpenMobileFilters={() => setMobileFiltersOpen(true)}
+            resultsCount={finalFilteredStores.length}
           />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-blue-100 to-purple-100" />
-        )}
-        
-        {/* Badge destacado */}
-        {featured && (
-          <div className="absolute top-3 left-3 px-2.5 py-1 bg-amber-500 text-white text-xs font-medium rounded-full flex items-center gap-1">
-            <Star className="w-3 h-3" />
-            Destacada
+        </div>
+
+        {/* Chips de filtros activos */}
+        {hasActiveFilters && (
+          <div className="mb-6">
+            <FilterChips
+              searchQuery={searchQuery}
+              selectedCity={selectedCity}
+              selectedCategory={selectedCategory}
+              sortBy={sortBy}
+              showFavoritesOnly={showFavoritesOnly}
+              onClearSearch={() => setSearchQuery('')}
+              onClearCity={() => setSelectedCity('')}
+              onClearCategory={() => setSelectedCategory('')}
+              onClearSort={() => setSortBy('relevance')}
+              onClearFavorites={() => setShowFavoritesOnly(false)}
+              onClearAll={clearFilters}
+            />
           </div>
         )}
 
-        {/* Logo */}
-        <div className="absolute -bottom-8 left-4">
-          {store.logo_url ? (
-            <img 
-              src={store.logo_url} 
-              alt={store.name}
-              className="w-16 h-16 rounded-xl border-4 border-white object-cover shadow-sm"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-xl border-4 border-white bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-sm">
-              <span className="text-2xl font-bold text-white">
-                {store.name?.charAt(0)?.toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
+        {/* Tiendas destacadas - Solo si no hay filtros activos */}
+        {!hasActiveFilters && !loading && (
+          <FeaturedStoresSection
+            featuredStores={featuredStores}
+            favorites={favorites}
+            onToggleFavorite={handleToggleFavorite}
+          />
+        )}
 
-      {/* Info */}
-      <div className="pt-10 px-4 pb-4">
-        <h3 className="font-semibold text-slate-900 mb-1 truncate">{store.name}</h3>
-        
-        <div className="flex items-center gap-2 text-sm text-slate-500 mb-3">
-          {store.city && (
-            <>
-              <MapPin className="w-3.5 h-3.5" />
-              <span className="truncate">{store.city}</span>
-            </>
-          )}
-        </div>
+        {/* Grid de tiendas */}
+        <StoresGrid
+          stores={paginatedStores}
+          loading={loading}
+          error={error}
+          onRetry={fetchData}
+          viewMode={viewMode}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={finalFilteredStores.length}
+          itemsPerPage={ITEMS_PER_PAGE}
+          onPageChange={setCurrentPage}
+          favorites={favorites}
+          onToggleFavorite={handleToggleFavorite}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
+          showHeader={!hasActiveFilters && featuredStores.length > 0}
+          title="Todas las tiendas"
+          subtitle="Explora catálogos y compra por WhatsApp"
+        />
 
-        <div className="flex items-center justify-between">
-          <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${planColors[store.plan] || planColors.gratis}`}>
-            {planLabels[store.plan] || 'Gratis'}
-          </span>
-          <span className="text-sm text-blue-600 font-medium flex items-center gap-1">
-            Ver tienda
-            <ChevronRight className="w-4 h-4" />
-          </span>
-        </div>
-      </div>
-    </Card>
-  )
-}
+        {/* CTA */}
+        <MarketplaceCTA />
+      </main>
 
-// Skeleton de card de tienda
-function StoreCardSkeleton() {
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-      <Skeleton className="h-32 rounded-none" />
-      <div className="pt-10 px-4 pb-4 relative">
-        <div className="absolute -top-8 left-4">
-          <Skeleton variant="avatar" width={64} height={64} className="rounded-xl" />
-        </div>
-        <Skeleton variant="title" className="w-2/3 mb-2" />
-        <Skeleton variant="text" className="w-1/2 mb-3" />
-        <div className="flex items-center justify-between">
-          <Skeleton className="w-16 h-6 rounded-full" />
-          <Skeleton className="w-20 h-5" />
-        </div>
-      </div>
+      {/* Footer */}
+      <MarketplaceFooter />
+
+      {/* Mobile Filters Drawer */}
+      <MobileFiltersDrawer
+        isOpen={mobileFiltersOpen}
+        onClose={() => setMobileFiltersOpen(false)}
+        selectedCity={selectedCity}
+        onCityChange={setSelectedCity}
+        selectedCategory={selectedCategory}
+        onCategoryChange={setSelectedCategory}
+        cities={cities}
+        categories={categories}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        showFavoritesOnly={showFavoritesOnly}
+        onFavoritesToggle={() => setShowFavoritesOnly(!showFavoritesOnly)}
+        favoritesCount={favorites.length}
+        onClearFilters={clearFilters}
+        hasActiveFilters={hasActiveFilters}
+      />
     </div>
   )
 }
