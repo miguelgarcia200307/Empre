@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../../hooks/useStore'
 import { useToast } from '../../hooks/useToast'
@@ -30,10 +30,11 @@ import {
   Image as ImageIcon,
   Lock,
   Crown,
+  AlertTriangle,
 } from 'lucide-react'
 
 const Productos = () => {
-  const { store, plan, canAddProduct, hasFeature, getLimit } = useStore()
+  const { store, plan, canAddProduct, hasFeature, getLimit, subscription } = useStore()
   const toast = useToast()
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -64,6 +65,40 @@ const Productos = () => {
 
   // Obtener límites del plan
   const productLimit = getLimit('products')
+  const maxProducts = productLimit.max
+  const isUnlimited = productLimit.isUnlimited
+
+  // Products with blocked status
+  const productsWithBlockedStatus = useMemo(() => {
+    if (isUnlimited) {
+      return products.map(p => ({ ...p, isBlocked: false }))
+    }
+    
+    // Sort by sort_order or created_at to determine which are "first"
+    const sortedProducts = [...products].sort((a, b) => {
+      if (a.sort_order !== undefined && b.sort_order !== undefined) {
+        return a.sort_order - b.sort_order
+      }
+      return new Date(a.created_at) - new Date(b.created_at)
+    })
+    
+    // Mark products beyond the limit as blocked
+    const productBlockedMap = new Map()
+    sortedProducts.forEach((product, index) => {
+      productBlockedMap.set(product.id, index >= maxProducts)
+    })
+    
+    // Return products in original order with blocked status
+    return products.map(p => ({
+      ...p,
+      isBlocked: productBlockedMap.get(p.id) || false,
+    }))
+  }, [products, maxProducts, isUnlimited])
+  
+  // Count blocked products
+  const blockedCount = useMemo(() => {
+    return productsWithBlockedStatus.filter(p => p.isBlocked).length
+  }, [productsWithBlockedStatus])
 
   useEffect(() => {
     if (store?.id) {
@@ -275,12 +310,14 @@ const Productos = () => {
     }
   }
 
-  // Filtered products
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = !filterCategory || product.category_id === filterCategory
-    return matchesSearch && matchesCategory
-  })
+  // Filtered products (now uses blocked status)
+  const filteredProducts = useMemo(() => {
+    return productsWithBlockedStatus.filter((product) => {
+      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesCategory = !filterCategory || product.category_id === filterCategory
+      return matchesSearch && matchesCategory
+    })
+  }, [productsWithBlockedStatus, searchTerm, filterCategory])
 
   if (loading) {
     return (
@@ -297,13 +334,38 @@ const Productos = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
           <p className="text-gray-600 mt-1">
-            {products.length} de {plan.maxProducts === -1 ? '∞' : plan.maxProducts} productos
+            {products.length} de {isUnlimited ? '∞' : maxProducts} productos
           </p>
         </div>
         <Button onClick={openCreateModal} icon={Plus}>
           Nuevo producto
         </Button>
       </div>
+      
+      {/* Blocked Products Warning */}
+      {blockedCount > 0 && (
+        <Card className="bg-amber-50 border-amber-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-medium text-amber-900">
+                {blockedCount} producto{blockedCount !== 1 ? 's' : ''} bloqueado{blockedCount !== 1 ? 's' : ''}
+              </h3>
+              <p className="text-sm text-amber-700 mt-1">
+                Tu plan permite máximo {maxProducts} productos. Los productos adicionales 
+                no se muestran en tu tienda pública, pero tus datos están seguros.
+              </p>
+              <Link 
+                to="/panel/plan" 
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-800 hover:text-amber-900 mt-2"
+              >
+                <Crown className="w-4 h-4" />
+                Mejorar plan para desbloquear
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card padding="sm">
@@ -354,7 +416,11 @@ const Productos = () => {
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredProducts.map((product) => (
-            <Card key={product.id} className="overflow-hidden" padding="none">
+            <Card 
+              key={product.id} 
+              className={`overflow-hidden ${product.isBlocked ? 'opacity-60' : ''}`} 
+              padding="none"
+            >
               {/* Contenedor de imagen con aspect ratio fijo */}
               <div className="relative w-full overflow-hidden bg-gray-50">
                 <div className="relative w-full aspect-square">
@@ -363,7 +429,7 @@ const Productos = () => {
                       src={product.main_image_url}
                       alt={product.name}
                       loading="lazy"
-                      className="absolute inset-0 w-full h-full object-cover"
+                      className={`absolute inset-0 w-full h-full object-cover ${product.isBlocked ? 'grayscale' : ''}`}
                     />
                   ) : (
                     <div className="absolute inset-0 w-full h-full bg-gray-100 flex items-center justify-center">
@@ -371,21 +437,30 @@ const Productos = () => {
                     </div>
                   )}
                 </div>
+                {/* Blocked overlay */}
+                {product.isBlocked && (
+                  <div className="absolute inset-0 bg-gray-900/20 flex items-center justify-center">
+                    <div className="bg-amber-100 rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg">
+                      <Lock className="w-4 h-4 text-amber-700" />
+                      <span className="text-sm font-medium text-amber-800">Bloqueado</span>
+                    </div>
+                  </div>
+                )}
                 <Badge
-                  variant={product.is_active ? 'green' : 'gray'}
+                  variant={product.isBlocked ? 'amber' : product.is_active ? 'green' : 'gray'}
                   className="absolute top-2 right-2 z-10"
                 >
-                  {product.is_active ? 'Activo' : 'Inactivo'}
+                  {product.isBlocked ? 'Bloqueado' : product.is_active ? 'Activo' : 'Inactivo'}
                 </Badge>
               </div>
               <div className="p-4">
-                <h3 className="font-semibold text-gray-900 truncate">
+                <h3 className={`font-semibold truncate ${product.isBlocked ? 'text-gray-500' : 'text-gray-900'}`}>
                   {product.name}
                 </h3>
                 {product.categories && (
                   <p className="text-sm text-gray-500">{product.categories.name}</p>
                 )}
-                <p className="text-lg font-bold text-blue-600 mt-2">
+                <p className={`text-lg font-bold mt-2 ${product.isBlocked ? 'text-gray-400' : 'text-blue-600'}`}>
                   {formatPrice(product.price)}
                 </p>
                 <div className="flex gap-2 mt-4">

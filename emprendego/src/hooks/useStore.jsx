@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from './useAuth'
+import { buildSubscriptionInfo } from '../lib/subscription'
 
 const StoreContext = createContext({})
 
@@ -431,6 +432,11 @@ export const StoreProvider = ({ children }) => {
   }), [getLimit])
 
   // ============================================
+  // SUBSCRIPTION INFO (Memoized)
+  // ============================================
+  const subscription = useMemo(() => buildSubscriptionInfo(store), [store])
+
+  // ============================================
   // CONTEXT VALUE
   // ============================================
   const value = useMemo(() => ({
@@ -462,6 +468,9 @@ export const StoreProvider = ({ children }) => {
     // Pre-computed permissions
     permissions,
     limits,
+    
+    // Subscription info
+    subscription,
   }), [
     store,
     loading,
@@ -476,6 +485,7 @@ export const StoreProvider = ({ children }) => {
     checkFeatures,
     permissions,
     limits,
+    subscription,
     fetchStore,
     fetchAllPlans,
   ])

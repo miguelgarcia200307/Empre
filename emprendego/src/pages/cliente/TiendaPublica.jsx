@@ -2,6 +2,10 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { generateThemeFromStore, HEADER_STYLES, CARD_STYLES, BUTTON_STYLES } from '../../data/templates'
+import { getRemainingTime } from '../../lib/subscription'
+
+// Límites del plan gratis (fallback)
+const FREE_PLAN_LIMITS = { maxProducts: 10, maxCategories: 3 }
 import { 
   ShoppingBag, 
   Search, 
@@ -384,23 +388,50 @@ export default function TiendaPublica({
 
         setStore(storeData)
 
-        // Obtener categorías activas
+        // ========================================
+        // OBTENER LÍMITES DEL PLAN EFECTIVO
+        // ========================================
+        let effectiveLimits = FREE_PLAN_LIMITS
+        
+        // Verificar si la suscripción está expirada
+        const subscriptionStatus = getRemainingTime(storeData.subscription_end_at)
+        const isSubscriptionExpired = subscriptionStatus.hasSubscription && subscriptionStatus.isExpired
+        
+        // Si no expiró, obtener límites del plan actual
+        if (!isSubscriptionExpired && storeData.plan) {
+          const { data: planData } = await supabase
+            .from('plans')
+            .select('max_products, max_categories')
+            .eq('slug', storeData.plan)
+            .single()
+          
+          if (planData) {
+            effectiveLimits = {
+              maxProducts: planData.max_products ?? FREE_PLAN_LIMITS.maxProducts,
+              maxCategories: planData.max_categories ?? FREE_PLAN_LIMITS.maxCategories,
+            }
+          }
+        }
+
+        // Obtener categorías activas (limitadas por plan)
         const { data: categoriesData } = await supabase
           .from('categories')
           .select('*')
           .eq('store_id', storeData.id)
           .eq('is_active', true)
           .order('sort_order', { ascending: true })
+          .limit(effectiveLimits.maxCategories)
 
         setCategories(categoriesData || [])
 
-        // Obtener productos activos
+        // Obtener productos activos (limitados por plan)
         const { data: productsData } = await supabase
           .from('products')
           .select('*')
           .eq('store_id', storeData.id)
           .eq('is_active', true)
           .order('sort_order', { ascending: true })
+          .limit(effectiveLimits.maxProducts)
 
         setProducts(productsData || [])
 

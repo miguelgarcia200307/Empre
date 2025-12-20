@@ -13,6 +13,15 @@ import {
 } from '../../components/ui'
 import { useToast } from '../../hooks/useToast'
 import {
+  formatDateForInput,
+  formatDateDisplay,
+  calculateEndDate,
+  validateSubscriptionDates,
+  DURATION_OPTIONS,
+  getRemainingTime,
+  formatRemainingLabel,
+} from '../../lib/subscription'
+import {
   Search,
   Filter,
   Store,
@@ -32,6 +41,10 @@ import {
   RefreshCw,
   User,
   ShieldAlert,
+  CalendarDays,
+  CalendarClock,
+  Sparkles,
+  X,
 } from 'lucide-react'
 
 const AdminTiendas = () => {
@@ -51,6 +64,18 @@ const AdminTiendas = () => {
   const [selectedStore, setSelectedStore] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [moderationModal, setModerationModal] = useState({ open: false, store: null, action: null })
+  
+  // Subscription Modal State
+  const [subscriptionModal, setSubscriptionModal] = useState({
+    open: false,
+    store: null,
+    plan: 'gratis',
+    startDate: formatDateForInput(new Date()),
+    endDate: '',
+    selectedDuration: null,
+    notes: '',
+    saving: false,
+  })
   const [moderationReason, setModerationReason] = useState('')
   const itemsPerPage = 10
 
@@ -202,32 +227,119 @@ const AdminTiendas = () => {
     }
   }
 
-  // Cambiar plan de tienda
+  // Cambiar plan de tienda (legacy - ahora usa modal)
   const handleChangePlan = async (store, newPlan) => {
+    // Open subscription modal instead of direct change
+    openSubscriptionModal(store, newPlan)
+  }
+
+  // Open subscription modal
+  const openSubscriptionModal = (store, initialPlan = null) => {
+    const today = formatDateForInput(new Date())
+    const storePlan = initialPlan || store.plan || 'gratis'
+    
+    // Calculate default end date (1 month from today for paid plans)
+    const defaultEndDate = storePlan !== 'gratis' 
+      ? formatDateForInput(calculateEndDate(new Date(), 1))
+      : ''
+    
+    setSubscriptionModal({
+      open: true,
+      store: store,
+      plan: storePlan,
+      startDate: store.subscription_start_at 
+        ? formatDateForInput(store.subscription_start_at) 
+        : today,
+      endDate: store.subscription_end_at 
+        ? formatDateForInput(store.subscription_end_at) 
+        : defaultEndDate,
+      selectedDuration: null,
+      notes: '',
+      saving: false,
+    })
+  }
+
+  // Handle duration selection
+  const handleDurationSelect = (months) => {
+    const endDate = calculateEndDate(subscriptionModal.startDate, months)
+    setSubscriptionModal(prev => ({
+      ...prev,
+      selectedDuration: months,
+      endDate: formatDateForInput(endDate),
+    }))
+  }
+
+  // Handle plan change in modal
+  const handleSubscriptionPlanChange = (newPlan) => {
+    setSubscriptionModal(prev => ({
+      ...prev,
+      plan: newPlan,
+      // Clear end date if switching to free plan
+      endDate: newPlan === 'gratis' ? '' : prev.endDate,
+      selectedDuration: newPlan === 'gratis' ? null : prev.selectedDuration,
+    }))
+  }
+
+  // Handle manual date change (clears duration selection)
+  const handleManualEndDateChange = (newEndDate) => {
+    setSubscriptionModal(prev => ({
+      ...prev,
+      endDate: newEndDate,
+      selectedDuration: null, // Clear auto-selection when manually edited
+    }))
+  }
+
+  // Save subscription
+  const handleSaveSubscription = async () => {
+    const { store, plan, startDate, endDate, notes } = subscriptionModal
+    
+    // Validate
+    const validation = validateSubscriptionDates(plan, startDate, endDate)
+    if (!validation.isValid) {
+      toast.error(validation.error)
+      return
+    }
+    
+    setSubscriptionModal(prev => ({ ...prev, saving: true }))
+    
     try {
-      const { error } = await supabase
-        .from('stores')
-        .update({ 
-          plan: newPlan,
-          plan_changed_at: new Date().toISOString()
-        })
-        .eq('id', store.id)
-
-      if (error) {
-        console.error('Error al cambiar plan:', error)
-        throw error
+      // Call the RPC function
+      const { data, error } = await supabase.rpc('admin_set_store_subscription', {
+        p_store_id: store.id,
+        p_plan: plan,
+        p_start_at: new Date(startDate).toISOString(),
+        p_end_at: plan === 'gratis' ? null : new Date(endDate).toISOString(),
+        p_notes: notes || null,
+      })
+      
+      if (error) throw error
+      
+      toast.success(data?.message || `Suscripción ${planNames[plan]} asignada correctamente`)
+      
+      // Update local state
+      const updatedStore = {
+        ...store,
+        plan: plan,
+        subscription_start_at: startDate,
+        subscription_end_at: plan === 'gratis' ? null : endDate,
+        subscription_status: 'active',
       }
-
-      toast.success(`Plan cambiado a ${planNames[newPlan]}`)
-      fetchStores()
+      
       if (selectedStore?.id === store.id) {
-        setSelectedStore({ ...selectedStore, plan: newPlan })
+        setSelectedStore(updatedStore)
       }
+      
+      setSubscriptionModal(prev => ({ ...prev, open: false, saving: false }))
+      fetchStores()
+      
     } catch (error) {
-      console.error('Error completo:', error)
-      toast.error(`Error al cambiar plan: ${error.message || 'Error desconocido'}`)
+      console.error('Error al asignar suscripción:', error)
+      toast.error(`Error: ${error.message || 'No se pudo asignar la suscripción'}`)
+      setSubscriptionModal(prev => ({ ...prev, saving: false }))
     }
   }
+
+  // Legacy handleChangePlan - now deprecated
 
   // Moderación de tienda
   const handleModeration = async () => {
@@ -714,31 +826,67 @@ const AdminTiendas = () => {
               )}
             </div>
 
-            {/* Change Plan */}
+            {/* Subscription Management */}
             <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Cambiar Plan</h4>
-              <div className="flex flex-wrap gap-2">
-                {['gratis', 'basico', 'emprendedor', 'pro'].map((plan) => (
-                  <button
-                    key={plan}
-                    onClick={() => handleChangePlan(selectedStore, plan)}
-                    disabled={selectedStore.plan === plan}
-                    className={`
-                      px-4 py-2 rounded-xl text-sm font-medium transition-all
-                      ${selectedStore.plan === plan
-                        ? `${planColors[plan]} ring-2 ring-offset-2 ring-blue-500`
-                        : `${planColors[plan]} opacity-60 hover:opacity-100`
-                      }
-                    `}
-                  >
-                    {planNames[plan]}
-                  </button>
-                ))}
+              <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">Plan y Suscripción</h4>
+              
+              {/* Current Plan Badge */}
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                <CreditCard className="w-5 h-5 text-slate-400" />
+                <div className="flex-1">
+                  <span className={`inline-flex px-2.5 py-1 rounded-lg text-sm font-medium ${planColors[selectedStore.plan || 'gratis']}`}>
+                    {planNames[selectedStore.plan || 'gratis']}
+                  </span>
+                </div>
+                {selectedStore.subscription_end_at && (
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Vence</p>
+                    <p className="text-sm font-medium text-slate-700">
+                      {formatDateDisplay(selectedStore.subscription_end_at)}
+                    </p>
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-slate-500">
-                * Al cambiar el plan manualmente, el usuario tendrá acceso inmediato a las nuevas funciones.
-                La integración de pagos está pendiente.
-              </p>
+              
+              {/* Subscription Status */}
+              {selectedStore.subscription_end_at && (
+                <div className={`p-3 rounded-xl border ${
+                  getRemainingTime(selectedStore.subscription_end_at).isExpired 
+                    ? 'bg-rose-50 border-rose-200'
+                    : getRemainingTime(selectedStore.subscription_end_at).days <= 7
+                      ? 'bg-amber-50 border-amber-200'
+                      : 'bg-emerald-50 border-emerald-200'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {getRemainingTime(selectedStore.subscription_end_at).isExpired ? (
+                      <XCircle className="w-4 h-4 text-rose-600" />
+                    ) : getRemainingTime(selectedStore.subscription_end_at).days <= 7 ? (
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    )}
+                    <span className={`text-sm font-medium ${
+                      getRemainingTime(selectedStore.subscription_end_at).isExpired 
+                        ? 'text-rose-700'
+                        : getRemainingTime(selectedStore.subscription_end_at).days <= 7
+                          ? 'text-amber-700'
+                          : 'text-emerald-700'
+                    }`}>
+                      {formatRemainingLabel(selectedStore.subscription_end_at)}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              {/* Manage Subscription Button */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => openSubscriptionModal(selectedStore)}
+              >
+                <CalendarClock className="w-4 h-4 mr-2" />
+                Gestionar suscripción
+              </Button>
             </div>
 
             {/* Actions */}
@@ -823,6 +971,215 @@ const AdminTiendas = () => {
               onClick={handleModeration}
             >
               Confirmar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Subscription Management Modal */}
+      <Modal
+        isOpen={subscriptionModal.open}
+        onClose={() => !subscriptionModal.saving && setSubscriptionModal(prev => ({ ...prev, open: false }))}
+        title="Gestionar suscripción"
+        size="md"
+        fullHeight
+      >
+        <div className="space-y-4 sm:space-y-5">
+          {/* Store Info */}
+          {subscriptionModal.store && (
+            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+              {subscriptionModal.store.logo_url ? (
+                <img
+                  src={subscriptionModal.store.logo_url}
+                  alt={subscriptionModal.store.name}
+                  className="w-10 h-10 rounded-xl object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                  <span className="text-white font-bold">
+                    {subscriptionModal.store.name?.charAt(0)?.toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-medium text-slate-900 truncate">{subscriptionModal.store.name}</p>
+                <p className="text-sm text-slate-500 truncate">/{subscriptionModal.store.slug}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Plan Selection */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">
+              Plan
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {['gratis', 'basico', 'emprendedor', 'pro'].map((plan) => (
+                <button
+                  key={plan}
+                  type="button"
+                  onClick={() => handleSubscriptionPlanChange(plan)}
+                  className={`
+                    px-3 py-2 rounded-xl text-sm font-medium transition-all border-2
+                    ${subscriptionModal.plan === plan
+                      ? `${planColors[plan]} border-blue-500 ring-2 ring-blue-200`
+                      : `${planColors[plan]} border-transparent opacity-60 hover:opacity-100`
+                    }
+                  `}
+                >
+                  {planNames[plan]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dates Section - Only for paid plans */}
+          {subscriptionModal.plan !== 'gratis' && (
+            <>
+              {/* Duration Quick Select */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Duración
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {DURATION_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleDurationSelect(option.value)}
+                      className={`
+                        px-3 py-1.5 rounded-lg text-sm font-medium transition-all border
+                        ${subscriptionModal.selectedDuration === option.value
+                          ? 'bg-blue-100 border-blue-300 text-blue-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        }
+                      `}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Date Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label htmlFor="sub-start-date" className="block text-sm font-medium text-slate-700">
+                    <CalendarDays className="w-4 h-4 inline mr-1" />
+                    Fecha inicio
+                  </label>
+                  <input
+                    id="sub-start-date"
+                    type="date"
+                    value={subscriptionModal.startDate}
+                    onChange={(e) => setSubscriptionModal(prev => ({
+                      ...prev,
+                      startDate: e.target.value,
+                      // Recalculate end date if duration was selected
+                      endDate: prev.selectedDuration 
+                        ? formatDateForInput(calculateEndDate(e.target.value, prev.selectedDuration))
+                        : prev.endDate,
+                    }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="sub-end-date" className="block text-sm font-medium text-slate-700">
+                    <CalendarClock className="w-4 h-4 inline mr-1" />
+                    Fecha fin
+                  </label>
+                  <input
+                    id="sub-end-date"
+                    type="date"
+                    value={subscriptionModal.endDate}
+                    onChange={(e) => handleManualEndDateChange(e.target.value)}
+                    min={subscriptionModal.startDate}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Preview */}
+          {subscriptionModal.plan && (
+            <div className={`p-3 sm:p-4 rounded-xl border ${
+              subscriptionModal.plan === 'gratis' 
+                ? 'bg-slate-50 border-slate-200'
+                : 'bg-blue-50 border-blue-200'
+            }`}>
+              <div className="flex items-start gap-3">
+                <Sparkles className={`w-5 h-5 mt-0.5 shrink-0 ${
+                  subscriptionModal.plan === 'gratis' ? 'text-slate-500' : 'text-blue-600'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <p className={`font-medium text-sm sm:text-base ${
+                    subscriptionModal.plan === 'gratis' ? 'text-slate-700' : 'text-blue-900'
+                  }`}>
+                    {subscriptionModal.plan === 'gratis' ? (
+                      'Plan Gratuito (sin vencimiento)'
+                    ) : subscriptionModal.endDate ? (
+                      <>
+                        Suscripción {planNames[subscriptionModal.plan]} activa desde{' '}
+                        <strong>{formatDateDisplay(subscriptionModal.startDate)}</strong>{' '}
+                        hasta <strong>{formatDateDisplay(subscriptionModal.endDate)}</strong>
+                      </>
+                    ) : (
+                      'Selecciona una duración o fecha de fin'
+                    )}
+                  </p>
+                  {subscriptionModal.plan !== 'gratis' && subscriptionModal.endDate && (
+                    <p className="text-xs sm:text-sm text-blue-700 mt-1">
+                      {formatRemainingLabel(subscriptionModal.endDate)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          <div className="space-y-2">
+            <label htmlFor="sub-notes" className="block text-sm font-medium text-slate-700">
+              Notas (opcional)
+            </label>
+            <Textarea
+              id="sub-notes"
+              placeholder="Ej: Promoción Black Friday, renovación manual..."
+              value={subscriptionModal.notes}
+              onChange={(e) => setSubscriptionModal(prev => ({ ...prev, notes: e.target.value }))}
+              rows={2}
+            />
+          </div>
+
+          {/* Validation Error */}
+          {subscriptionModal.plan !== 'gratis' && !subscriptionModal.endDate && (
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>Los planes de pago requieren una fecha de fin</span>
+            </div>
+          )}
+
+          {/* Footer con botones */}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-3 pt-4 border-t border-slate-100">
+            <Button
+              variant="ghost"
+              onClick={() => setSubscriptionModal(prev => ({ ...prev, open: false }))}
+              disabled={subscriptionModal.saving}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSaveSubscription}
+              loading={subscriptionModal.saving}
+              disabled={
+                subscriptionModal.saving || 
+                (subscriptionModal.plan !== 'gratis' && !subscriptionModal.endDate)
+              }
+              className="w-full sm:w-auto"
+            >
+              Guardar cambios
             </Button>
           </div>
         </div>

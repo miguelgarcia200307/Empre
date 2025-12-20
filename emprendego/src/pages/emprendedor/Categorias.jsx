@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useStore } from '../../hooks/useStore'
 import { useToast } from '../../hooks/useToast'
@@ -10,6 +10,7 @@ import {
   Modal,
   Spinner,
   EmptyState,
+  Badge,
 } from '../../components/ui'
 import {
   Plus,
@@ -19,10 +20,11 @@ import {
   GripVertical,
   Lock,
   Crown,
+  AlertTriangle,
 } from 'lucide-react'
 
 const Categorias = () => {
-  const { store, plan, canAddCategory, getLimit } = useStore()
+  const { store, plan, canAddCategory, getLimit, subscription } = useStore()
   const toast = useToast()
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -42,6 +44,24 @@ const Categorias = () => {
   const categoryLimitData = getLimit('categories')
   const categoryLimit = categoryLimitData.max
   const isUnlimited = categoryLimitData.isUnlimited
+
+  // Determine which categories are blocked (over limit)
+  const categoriesWithBlockedStatus = useMemo(() => {
+    if (isUnlimited) {
+      return categories.map(cat => ({ ...cat, isBlocked: false }))
+    }
+    
+    // Categories are sorted by sort_order, first N are allowed
+    return categories.map((cat, index) => ({
+      ...cat,
+      isBlocked: index >= categoryLimit,
+    }))
+  }, [categories, categoryLimit, isUnlimited])
+  
+  // Count blocked categories
+  const blockedCount = useMemo(() => {
+    return categoriesWithBlockedStatus.filter(c => c.isBlocked).length
+  }, [categoriesWithBlockedStatus])
 
   useEffect(() => {
     if (store?.id) {
@@ -185,6 +205,31 @@ const Categorias = () => {
           Nueva categoría
         </Button>
       </div>
+      
+      {/* Blocked Categories Warning */}
+      {blockedCount > 0 && (
+        <Card className="bg-amber-50 border-amber-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-medium text-amber-900">
+                {blockedCount} categoría{blockedCount !== 1 ? 's' : ''} bloqueada{blockedCount !== 1 ? 's' : ''}
+              </h3>
+              <p className="text-sm text-amber-700 mt-1">
+                Tu plan permite máximo {categoryLimit} categorías. Las categorías adicionales 
+                no se muestran en tu tienda pública, pero tus datos están seguros.
+              </p>
+              <Link 
+                to="/panel/plan" 
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-800 hover:text-amber-900 mt-2"
+              >
+                <Crown className="w-4 h-4" />
+                Mejorar plan para desbloquear
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Categories list */}
       {categories.length === 0 ? (
@@ -198,21 +243,42 @@ const Categorias = () => {
       ) : (
         <Card padding="none">
           <div className="divide-y divide-gray-100">
-            {categories.map((category, index) => (
+            {categoriesWithBlockedStatus.map((category, index) => (
               <div
                 key={category.id}
-                className="flex items-center gap-4 p-4 hover:bg-gray-50"
+                className={`flex items-center gap-4 p-4 transition-colors ${
+                  category.isBlocked 
+                    ? 'bg-gray-50/50 opacity-60' 
+                    : 'hover:bg-gray-50'
+                }`}
               >
                 <div className="text-gray-400 cursor-grab">
                   <GripVertical className="w-5 h-5" />
                 </div>
                 
-                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                  <FolderOpen className="w-5 h-5 text-blue-600" />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  category.isBlocked ? 'bg-gray-100' : 'bg-blue-100'
+                }`}>
+                  {category.isBlocked ? (
+                    <Lock className="w-5 h-5 text-gray-400" />
+                  ) : (
+                    <FolderOpen className="w-5 h-5 text-blue-600" />
+                  )}
                 </div>
                 
-                <div className="flex-1">
-                  <h3 className="font-medium text-gray-900">{category.name}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-medium truncate ${
+                      category.isBlocked ? 'text-gray-500' : 'text-gray-900'
+                    }`}>
+                      {category.name}
+                    </h3>
+                    {category.isBlocked && (
+                      <Badge variant="amber" size="sm">
+                        Bloqueada
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500">
                     {category.productCount} {category.productCount === 1 ? 'producto' : 'productos'}
                   </p>
@@ -222,6 +288,7 @@ const Categorias = () => {
                   <button
                     onClick={() => openEditModal(category)}
                     className="p-2 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    title={category.isBlocked ? 'Editar (categoría bloqueada)' : 'Editar'}
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>

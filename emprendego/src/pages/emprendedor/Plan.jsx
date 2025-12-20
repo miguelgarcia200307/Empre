@@ -36,6 +36,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Lock,
+  Clock,
+  Shield,
+  Calendar,
 } from 'lucide-react'
 
 // ============================================
@@ -49,7 +52,7 @@ const PAYMENTS_ENABLED = false
 // ============================================
 
 const Plan = () => {
-  const { store, plan: currentPlanFromStore, changePlan } = useStore()
+  const { store, plan: currentPlanFromStore, changePlan, subscription } = useStore()
   const { plans, loading: plansLoading, error: plansError, refetch, getPlanBySlug } = usePlans()
   const toast = useToast()
   
@@ -282,8 +285,86 @@ const Plan = () => {
               )}
             </div>
           </div>
+          
+          {/* Subscription Time Remaining */}
+          {subscription?.isPaid && subscription?.remainingLabel && (
+            <div className={`mt-4 pt-4 border-t ${
+              subscription.isExpired 
+                ? 'border-rose-200'
+                : subscription.isExpiringSoon 
+                  ? 'border-amber-200'
+                  : 'border-gray-200/50'
+            }`}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  {subscription.isExpired ? (
+                    <AlertTriangle className="w-5 h-5 text-rose-500" />
+                  ) : subscription.isExpiringSoon ? (
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  ) : (
+                    <Clock className="w-5 h-5 text-gray-400" />
+                  )}
+                  <span className={`font-medium ${
+                    subscription.isExpired 
+                      ? 'text-rose-700'
+                      : subscription.isExpiringSoon 
+                        ? 'text-amber-700'
+                        : 'text-gray-700'
+                  }`}>
+                    {subscription.isExpired 
+                      ? 'Tu suscripción ha vencido' 
+                      : `Tiempo restante: ${subscription.remainingLabel}`
+                    }
+                  </span>
+                </div>
+                {subscription.endAt && (
+                  <div className="flex items-center gap-1.5 text-sm text-gray-500">
+                    <Calendar className="w-4 h-4" />
+                    <span>
+                      Vence el {new Date(subscription.endAt).toLocaleDateString('es-CO', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </Card>
       )}
+      
+      {/* Expired Plan Alert */}
+      {subscription?.isExpired && (
+        <Card className="bg-rose-50 border-rose-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-rose-900">Tu suscripción ha vencido</h3>
+              <p className="text-sm text-rose-700 mt-1">
+                Tu plan ha cambiado a Gratuito. Para recuperar las funciones premium, 
+                contacta al administrador para renovar tu suscripción.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+      
+      {/* Data Protection Notice */}
+      <Card className="bg-blue-50 border-blue-100">
+        <div className="flex items-start gap-3">
+          <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
+          <div>
+            <h3 className="font-medium text-blue-900">Tus datos están protegidos</h3>
+            <p className="text-sm text-blue-700 mt-1">
+              Si tu plan vence, tus datos no se pierden: quedan guardados y bloqueados hasta que renueves. 
+              Los productos y categorías que excedan el límite del plan gratuito simplemente no se mostrarán 
+              en tu tienda pública, pero permanecerán intactos.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       {/* Grid de planes dinámicos */}
       {plans.length > 0 ? (

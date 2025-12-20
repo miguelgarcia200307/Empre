@@ -26,6 +26,8 @@ import {
   Sparkles,
   Zap,
   Star,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react'
 
 // ============================================
@@ -104,7 +106,7 @@ const navigation = [
 
 const PanelLayout = () => {
   const { user, signOut } = useAuth()
-  const { store, plan, hasFeature } = useStore()
+  const { store, plan, hasFeature, subscription } = useStore()
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
@@ -285,7 +287,55 @@ const PanelLayout = () => {
                     {styles.badgeText}
                   </span>
                 </div>
-                {plan.id === 'gratis' && (
+                
+                {/* Subscription Status */}
+                {subscription?.isPaid && subscription?.remainingLabel && (
+                  <div className={`mt-2 pt-2 border-t ${
+                    subscription.isExpired 
+                      ? 'border-rose-100' 
+                      : subscription.isExpiringSoon 
+                        ? 'border-amber-100'
+                        : 'border-gray-100'
+                  }`}>
+                    <p className={`text-xs font-medium flex items-center gap-1 ${
+                      subscription.isExpired 
+                        ? 'text-rose-600' 
+                        : subscription.isExpiringSoon 
+                          ? 'text-amber-600'
+                          : 'text-gray-500'
+                    }`}>
+                      {subscription.isExpired ? (
+                        <>
+                          <AlertTriangle className="w-3 h-3" />
+                          Plan vencido
+                        </>
+                      ) : subscription.isExpiringSoon ? (
+                        <>
+                          <AlertTriangle className="w-3 h-3" />
+                          Vence pronto
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3 h-3" />
+                          {subscription.remainingLabel}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                )}
+                
+                {/* Expired plan notice */}
+                {subscription?.isExpired && (
+                  <div className="mt-2 pt-2 border-t border-rose-100">
+                    <p className="text-xs text-rose-600 font-medium flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      Renueva para continuar
+                    </p>
+                  </div>
+                )}
+                
+                {/* Free plan upsell (only if no subscription info shown) */}
+                {plan.id === 'gratis' && !subscription?.isExpired && (
                   <div className="mt-2 pt-2 border-t border-rose-100">
                     <p className="text-xs text-rose-600 font-medium flex items-center gap-1">
                       <Zap className="w-3 h-3" />

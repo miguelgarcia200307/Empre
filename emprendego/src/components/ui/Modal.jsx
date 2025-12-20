@@ -20,6 +20,7 @@ const Modal = ({
   children,
   footer,
   className = '',
+  fullHeight = false, // Nueva prop para modales con scroll interno
 }) => {
   // Cerrar con ESC
   useEffect(() => {
@@ -41,7 +42,7 @@ const Modal = ({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className={`fixed inset-0 z-50 flex ${fullHeight ? 'items-start sm:items-center' : 'items-center'} justify-center p-3 sm:p-4`}>
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
@@ -50,14 +51,18 @@ const Modal = ({
       
       {/* Modal */}
       <div 
-        className={`relative w-full ${sizes[size]} bg-white rounded-2xl shadow-2xl animate-scale-in ${className}`}
+        className={`
+          relative w-full ${sizes[size]} bg-white rounded-2xl shadow-2xl animate-scale-in
+          ${fullHeight ? 'max-h-[calc(100dvh-24px)] sm:max-h-[90vh] flex flex-col overflow-hidden mt-3 sm:mt-0' : ''}
+          ${className}
+        `}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
       >
         {/* Header */}
         {(title || showClose) && (
-          <div className="flex items-start justify-between p-6 pb-0">
+          <div className={`flex items-start justify-between p-6 pb-0 ${fullHeight ? 'shrink-0' : ''}`}>
             <div>
               {title && (
                 <h2 id="modal-title" className="text-xl font-semibold text-gray-900">
@@ -81,13 +86,13 @@ const Modal = ({
         )}
         
         {/* Content */}
-        <div className="p-6">
+        <div className={`p-6 ${fullHeight ? 'flex-1 overflow-y-auto min-h-0' : ''}`}>
           {children}
         </div>
         
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 p-6 pt-0">
+          <div className={`flex items-center justify-end gap-3 p-6 pt-0 ${fullHeight ? 'shrink-0' : ''}`}>
             {footer}
           </div>
         )}
