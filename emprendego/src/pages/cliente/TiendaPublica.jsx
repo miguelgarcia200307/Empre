@@ -6,6 +6,18 @@ import { getRemainingTime } from '../../lib/subscription'
 
 // Límites del plan gratis (fallback)
 const FREE_PLAN_LIMITS = { maxProducts: 10, maxCategories: 3 }
+
+/**
+ * Helper para aplicar límite a una query de Supabase solo si es válido.
+ * Si limit es null, undefined, -1 o <= 0, NO aplica .limit() (ilimitado).
+ * Si limit es un entero positivo, aplica .limit(n).
+ */
+const applyLimit = (query, limit) => {
+  if (limit === null || limit === undefined) return query
+  const n = Number(limit)
+  if (n === -1 || !Number.isFinite(n) || n <= 0) return query
+  return query.limit(n)
+}
 import { 
   ShoppingBag, 
   Search, 
@@ -413,25 +425,37 @@ export default function TiendaPublica({
           }
         }
 
-        // Obtener categorías activas (limitadas por plan)
-        const { data: categoriesData } = await supabase
+        // Obtener categorías activas (limitadas por plan si aplica)
+        let categoriesQuery = supabase
           .from('categories')
           .select('*')
           .eq('store_id', storeData.id)
           .eq('is_active', true)
           .order('sort_order', { ascending: true })
-          .limit(effectiveLimits.maxCategories)
+        
+        categoriesQuery = applyLimit(categoriesQuery, effectiveLimits.maxCategories)
+        const { data: categoriesData, error: categoriesError } = await categoriesQuery
+        
+        if (categoriesError) {
+          console.error('Error fetching categories:', categoriesError)
+        }
 
         setCategories(categoriesData || [])
 
-        // Obtener productos activos (limitados por plan)
-        const { data: productsData } = await supabase
+        // Obtener productos activos (limitados por plan si aplica)
+        let productsQuery = supabase
           .from('products')
           .select('*')
           .eq('store_id', storeData.id)
           .eq('is_active', true)
           .order('sort_order', { ascending: true })
-          .limit(effectiveLimits.maxProducts)
+        
+        productsQuery = applyLimit(productsQuery, effectiveLimits.maxProducts)
+        const { data: productsData, error: productsError } = await productsQuery
+        
+        if (productsError) {
+          console.error('Error fetching products:', productsError)
+        }
 
         setProducts(productsData || [])
 
@@ -593,8 +617,13 @@ export default function TiendaPublica({
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div 
-            className="w-12 h-12 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-4"
-            style={{ borderColor: primaryColor, borderTopColor: 'transparent' }}
+            className="w-12 h-12 border-3 rounded-full animate-spin mx-auto mb-4"
+            style={{ 
+              borderTopColor: 'transparent',
+              borderRightColor: primaryColor,
+              borderBottomColor: primaryColor,
+              borderLeftColor: primaryColor,
+            }}
           />
           <p className="text-gray-500">Cargando tienda...</p>
         </div>
@@ -654,8 +683,13 @@ export default function TiendaPublica({
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div 
-            className="w-12 h-12 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-4"
-            style={{ borderColor: '#2563eb', borderTopColor: 'transparent' }}
+            className="w-12 h-12 border-3 rounded-full animate-spin mx-auto mb-4"
+            style={{ 
+              borderTopColor: 'transparent',
+              borderRightColor: '#2563eb',
+              borderBottomColor: '#2563eb',
+              borderLeftColor: '#2563eb',
+            }}
           />
           <p className="text-gray-500">Cargando tienda...</p>
         </div>
