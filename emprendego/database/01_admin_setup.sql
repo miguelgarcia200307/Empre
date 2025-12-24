@@ -1,4 +1,4 @@
--- ============================================
+  -- ============================================
 -- EMPRENDEGO - Panel Administrador (Setup SQL)
 -- Este script agrega las tablas y datos necesarios
 -- para el Panel Administrador

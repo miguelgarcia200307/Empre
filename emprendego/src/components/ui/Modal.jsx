@@ -7,7 +7,7 @@ const sizes = {
   md: 'max-w-lg',
   lg: 'max-w-2xl',
   xl: 'max-w-4xl',
-  full: 'max-w-[90vw]',
+  full: 'max-w-[95vw] sm:max-w-[90vw]',
 }
 
 const Modal = ({
@@ -20,7 +20,7 @@ const Modal = ({
   children,
   footer,
   className = '',
-  fullHeight = false, // Nueva prop para modales con scroll interno
+  fullHeight = false, // Prop para modales con scroll interno (header/footer sticky)
 }) => {
   // Cerrar con ESC
   useEffect(() => {
@@ -41,8 +41,13 @@ const Modal = ({
 
   if (!isOpen) return null
 
+  // Clases base para el contenedor del modal
+  const modalContainerClasses = fullHeight
+    ? 'max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden'
+    : 'max-h-[92vh] overflow-y-auto'
+
   return (
-    <div className={`fixed inset-0 z-50 flex ${fullHeight ? 'items-start sm:items-center' : 'items-center'} justify-center p-3 sm:p-4`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
@@ -53,30 +58,33 @@ const Modal = ({
       <div 
         className={`
           relative w-full ${sizes[size]} bg-white rounded-2xl shadow-2xl animate-scale-in
-          ${fullHeight ? 'max-h-[calc(100dvh-24px)] sm:max-h-[90vh] flex flex-col overflow-hidden mt-3 sm:mt-0' : ''}
+          ${modalContainerClasses}
           ${className}
         `}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
       >
-        {/* Header */}
+        {/* Header - siempre sticky cuando fullHeight */}
         {(title || showClose) && (
-          <div className={`flex items-start justify-between p-6 pb-0 ${fullHeight ? 'shrink-0' : ''}`}>
-            <div>
+          <div className={`
+            flex items-start justify-between gap-4 px-4 sm:px-6 py-4
+            ${fullHeight ? 'shrink-0 border-b border-gray-100 bg-white sticky top-0 z-10' : ''}
+          `}>
+            <div className="min-w-0 flex-1">
               {title && (
-                <h2 id="modal-title" className="text-xl font-semibold text-gray-900">
+                <h2 id="modal-title" className="text-lg sm:text-xl font-semibold text-gray-900 truncate">
                   {title}
                 </h2>
               )}
               {description && (
-                <p className="mt-1 text-sm text-gray-500">{description}</p>
+                <p className="mt-1 text-sm text-gray-500 line-clamp-2">{description}</p>
               )}
             </div>
             {showClose && (
               <button
                 onClick={onClose}
-                className="p-2 -m-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                className="shrink-0 p-2 -m-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                 aria-label="Cerrar"
               >
                 <X className="w-5 h-5" />
@@ -86,13 +94,21 @@ const Modal = ({
         )}
         
         {/* Content */}
-        <div className={`p-6 ${fullHeight ? 'flex-1 overflow-y-auto min-h-0' : ''}`}>
+        <div className={`
+          px-4 sm:px-6 
+          ${fullHeight ? 'flex-1 overflow-y-auto min-h-0 py-4' : 'py-4'}
+          ${!title && !showClose ? 'pt-6' : ''}
+        `}>
           {children}
         </div>
         
-        {/* Footer */}
+        {/* Footer - siempre sticky cuando fullHeight */}
         {footer && (
-          <div className={`flex items-center justify-end gap-3 p-6 pt-0 ${fullHeight ? 'shrink-0' : ''}`}>
+          <div className={`
+            flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 
+            px-4 sm:px-6 py-4
+            ${fullHeight ? 'shrink-0 border-t border-gray-100 bg-white sticky bottom-0 z-10' : 'pt-2'}
+          `}>
             {footer}
           </div>
         )}
@@ -121,10 +137,10 @@ Modal.Confirm = ({
     size="sm"
     footer={
       <>
-        <Button variant="secondary" onClick={onClose} disabled={loading}>
+        <Button variant="secondary" onClick={onClose} disabled={loading} className="w-full sm:w-auto">
           {cancelText}
         </Button>
-        <Button variant={variant} onClick={onConfirm} loading={loading}>
+        <Button variant={variant} onClick={onConfirm} loading={loading} className="w-full sm:w-auto">
           {confirmText}
         </Button>
       </>

@@ -1,16 +1,36 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
-import { generateThemeFromStore, HEADER_STYLES, CARD_STYLES, BUTTON_STYLES } from '../../data/templates'
+import { generateThemeFromStore } from '../../data/templates'
 import { getRemainingTime } from '../../lib/subscription'
+import { generateCartItemId } from '../../lib/variants'
+import { Store, AlertCircle } from 'lucide-react'
+
+// Premium Store Components
+import {
+  StoreHeader,
+  StoreHero,
+  StoreWelcome,
+  StoreSearchAndFilters,
+  ProductGrid,
+  EmptyProductsState,
+  ProductModal,
+  CartDrawer,
+  RecommendedSection,
+  StoreFooter,
+  FloatingCartButton,
+  generateCSSVariables,
+} from './components'
+
+// ============================================
+// CONSTANTS & HELPERS
+// ============================================
 
 // Límites del plan gratis (fallback)
 const FREE_PLAN_LIMITS = { maxProducts: 10, maxCategories: 3 }
 
 /**
  * Helper para aplicar límite a una query de Supabase solo si es válido.
- * Si limit es null, undefined, -1 o <= 0, NO aplica .limit() (ilimitado).
- * Si limit es un entero positivo, aplica .limit(n).
  */
 const applyLimit = (query, limit) => {
   if (limit === null || limit === undefined) return query
@@ -18,50 +38,14 @@ const applyLimit = (query, limit) => {
   if (n === -1 || !Number.isFinite(n) || n <= 0) return query
   return query.limit(n)
 }
-import { 
-  ShoppingBag, 
-  Search, 
-  X, 
-  Plus, 
-  Minus, 
-  Trash2, 
-  MessageCircle,
-  Store,
-  ChevronLeft,
-  ChevronRight,
-  AlertCircle,
-  Package,
-  MapPin,
-  Clock,
-  Phone,
-  Instagram,
-  Facebook,
-  CreditCard,
-  Truck,
-  Star,
-  Sparkles,
-  Heart,
-  Share2,
-  Check,
-  ShieldCheck,
-  Tag,
-  Rocket,
-} from 'lucide-react'
 
 // ============================================
-// TIENDA PÚBLICA - Vista del cliente (Rediseño Premium)
-// ============================================
-
-// ============================================
-// UTILIDADES DE TRACKING LOCAL (Para recomendaciones)
+// LOCAL ACTIVITY TRACKING (Para recomendaciones)
 // ============================================
 
 const STORAGE_KEY_PREFIX = 'eg_store_activity_'
 const MAX_TRACKED_ITEMS = 30
 
-/**
- * Obtiene la actividad del usuario para una tienda específica
- */
 const getStoreActivity = (storeId) => {
   if (!storeId) return null
   try {
@@ -77,13 +61,9 @@ const getStoreActivity = (storeId) => {
   }
 }
 
-/**
- * Guarda la actividad del usuario
- */
 const saveStoreActivity = (storeId, activity) => {
   if (!storeId) return
   try {
-    // Limitar arrays para no saturar storage
     const trimmed = {
       viewedProducts: activity.viewedProducts.slice(-MAX_TRACKED_ITEMS),
       viewedCategories: activity.viewedCategories.slice(-MAX_TRACKED_ITEMS),
@@ -96,19 +76,14 @@ const saveStoreActivity = (storeId, activity) => {
   }
 }
 
-/**
- * Registra un evento de vista de producto
- */
 const trackProductView = (storeId, productId, categoryId) => {
   const activity = getStoreActivity(storeId)
   if (!activity) return
 
-  // Agregar producto visto (sin duplicar consecutivos)
   if (activity.viewedProducts[activity.viewedProducts.length - 1] !== productId) {
     activity.viewedProducts.push(productId)
   }
   
-  // Agregar categoría vista
   if (categoryId && activity.viewedCategories[activity.viewedCategories.length - 1] !== categoryId) {
     activity.viewedCategories.push(categoryId)
   }
@@ -116,9 +91,6 @@ const trackProductView = (storeId, productId, categoryId) => {
   saveStoreActivity(storeId, activity)
 }
 
-/**
- * Registra un evento de agregar al carrito
- */
 const trackAddToCart = (storeId, productId, categoryId = null) => {
   const activity = getStoreActivity(storeId)
   if (!activity) return
@@ -127,11 +99,9 @@ const trackAddToCart = (storeId, productId, categoryId = null) => {
     activity.addedToCart.push(productId)
   }
   
-  // Trackear categoría del producto agregado (más peso)
   if (categoryId) {
     activity.cartCategories = activity.cartCategories || []
     activity.cartCategories.push(categoryId)
-    // Mantener solo últimas 10
     if (activity.cartCategories.length > 10) {
       activity.cartCategories = activity.cartCategories.slice(-10)
     }
@@ -140,17 +110,10 @@ const trackAddToCart = (storeId, productId, categoryId = null) => {
   saveStoreActivity(storeId, activity)
 }
 
-/**
- * 🧠 ALGORITMO INTELIGENTE DE RECOMENDACIONES
- * Sistema de scoring multicapa para "Te puede interesar"
- * 
- * Señales utilizadas:
- * 1. Coincidencia con búsqueda actual (peso ALTO)
- * 2. Historial de interacción en sesión (peso MEDIO)
- * 3. Popularidad del producto (peso MEDIO)
- * 4. Diversidad controlada (peso BAJO)
- * 5. Exclusiones inteligentes
- */
+// ============================================
+// RECOMMENDATIONS ALGORITHM
+// ============================================
+
 const generateRecommendations = (storeId, products, context = {}) => {
   const {
     currentProductId = null,
@@ -162,186 +125,94 @@ const generateRecommendations = (storeId, products, context = {}) => {
   const activity = getStoreActivity(storeId)
   if (!activity || products.length === 0) return []
 
-  // =========================================
-  // 1. PREPARAR DATOS DE CONTEXTO
-  // =========================================
-  
-  // Frecuencia de categorías vistas en sesión
   const viewedCategoryFreq = {}
   activity.viewedCategories.forEach(catId => {
     viewedCategoryFreq[catId] = (viewedCategoryFreq[catId] || 0) + 1
   })
   
-  // Frecuencia de categorías en carrito (más peso)
   const cartCategoryFreq = {}
   ;(activity.cartCategories || []).forEach(catId => {
     cartCategoryFreq[catId] = (cartCategoryFreq[catId] || 0) + 1
   })
 
-  // Obtener nombre de categoría activa para matching de texto
-  const activeCategoryName = selectedCategory !== 'all' 
-    ? categories.find(c => c.id === selectedCategory)?.name?.toLowerCase() || ''
-    : ''
-
-  // Normalizar búsqueda
   const searchTerms = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean)
 
-  // =========================================
-  // 2. CALCULAR SCORE PARA CADA PRODUCTO
-  // =========================================
-  
   const scored = products.map(product => {
     let score = 0
-    const reasons = [] // Para debug
 
-    // -----------------------------------------
-    // 2.1 COINCIDENCIA CON BÚSQUEDA (Peso ALTO)
-    // -----------------------------------------
     if (searchTerms.length > 0) {
       const productName = (product.name || '').toLowerCase()
       const productDesc = (product.description || '').toLowerCase()
       
       searchTerms.forEach(term => {
-        // Coincidencia en nombre (+30 por término)
         if (productName.includes(term)) {
           score += 30
-          reasons.push(`name:${term}`)
-        }
-        // Coincidencia en descripción (+15 por término)
-        else if (productDesc.includes(term)) {
+        } else if (productDesc.includes(term)) {
           score += 15
-          reasons.push(`desc:${term}`)
         }
       })
     }
 
-    // Misma categoría que filtro activo (+50)
     if (selectedCategory !== 'all' && product.category_id === selectedCategory) {
       score += 50
-      reasons.push('sameCat')
     }
 
-    // -----------------------------------------
-    // 2.2 HISTORIAL DE SESIÓN (Peso MEDIO)
-    // -----------------------------------------
-    
-    // Categoría vista en sesión (+3 por frecuencia)
     if (product.category_id && viewedCategoryFreq[product.category_id]) {
       score += viewedCategoryFreq[product.category_id] * 3
-      reasons.push(`viewedCat:${viewedCategoryFreq[product.category_id]}`)
     }
     
-    // Categoría en carrito (+8 por frecuencia, más peso)
     if (product.category_id && cartCategoryFreq[product.category_id]) {
       score += cartCategoryFreq[product.category_id] * 8
-      reasons.push(`cartCat:${cartCategoryFreq[product.category_id]}`)
     }
 
-    // -----------------------------------------
-    // 2.3 POPULARIDAD INTERNA (Peso MEDIO)
-    // -----------------------------------------
-    
-    // Producto destacado (+10)
-    if (product.is_featured) {
-      score += 10
-      reasons.push('featured')
-    }
-    
-    // Producto con descuento (+5) - atrae atención
-    if (product.compare_price && product.compare_price > product.price) {
-      score += 5
-      reasons.push('discount')
-    }
-    
-    // Producto con buenas ventas (si existe el campo)
-    if (product.total_sales > 0) {
-      score += Math.min(product.total_sales, 20) // Cap en 20 puntos
-      reasons.push(`sales:${product.total_sales}`)
-    }
+    if (product.is_featured) score += 10
+    if (product.compare_price && product.compare_price > product.price) score += 5
+    if (product.total_sales > 0) score += Math.min(product.total_sales, 20)
 
-    // -----------------------------------------
-    // 2.4 PENALIZACIONES (Exclusiones suaves)
-    // -----------------------------------------
-    
-    // Visto recientemente (-5, menos penalización que antes)
     const recentViewed = activity.viewedProducts.slice(-5)
-    if (recentViewed.includes(product.id)) {
-      score -= 5
-      reasons.push('recentlyViewed')
-    }
-    
-    // Ya está en carrito (-30, no mostrar lo que ya tiene)
-    if (activity.addedToCart.includes(product.id)) {
-      score -= 30
-      reasons.push('inCart')
-    }
-    
-    // Excluir producto actual (modal abierto)
-    if (product.id === currentProductId) {
-      score = -1000
-      reasons.push('currentProduct')
-    }
-    
-    // Excluir productos sin stock
-    if (product.track_inventory && product.stock_quantity === 0) {
-      score = -1000
-      reasons.push('outOfStock')
-    }
-    
-    // Excluir productos inactivos
-    if (product.is_active === false) {
-      score = -1000
-      reasons.push('inactive')
-    }
+    if (recentViewed.includes(product.id)) score -= 5
+    if (activity.addedToCart.includes(product.id)) score -= 30
+    if (product.id === currentProductId) score = -1000
+    if (product.track_inventory && product.stock_quantity === 0) score = -1000
+    if (product.is_active === false) score = -1000
 
-    return { ...product, _score: score, _reasons: reasons }
+    return { ...product, _score: score }
   })
 
-  // =========================================
-  // 3. ORDENAR Y APLICAR DIVERSIDAD
-  // =========================================
-  
-  // Filtrar excluidos y ordenar por score
   const candidates = scored
     .filter(p => p._score > -100)
     .sort((a, b) => b._score - a._score)
 
-  // Aplicar diversidad: máximo 2 productos de la misma categoría
   const final = []
   const categoryCount = {}
   
   for (const product of candidates) {
-    if (final.length >= 4) break // Máximo 4 productos
+    if (final.length >= 4) break
     
     const catId = product.category_id || 'uncategorized'
     const currentCount = categoryCount[catId] || 0
     
-    // Permitir máximo 2 de la misma categoría para diversidad
     if (currentCount < 2) {
       final.push(product)
       categoryCount[catId] = currentCount + 1
     }
   }
 
-  // =========================================
-  // 4. FALLBACK SI NO HAY SUFICIENTES
-  // =========================================
-  
-  // Si tenemos menos de 3, completar con destacados/nuevos
   if (final.length < 3) {
     const usedIds = new Set(final.map(p => p.id))
-    
-    // Agregar destacados no usados
     const fallbacks = products
       .filter(p => !usedIds.has(p.id) && p._score > -100)
-      .filter(p => p.is_featured || !p.compare_price) // Destacados o precio normal
+      .filter(p => p.is_featured || !p.compare_price)
       .slice(0, 4 - final.length)
-    
     final.push(...fallbacks)
   }
 
-  return final.slice(0, 4) // Garantizar máximo 4
+  return final.slice(0, 4)
 }
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 export default function TiendaPublica({ 
   isPreview = false, 
@@ -351,14 +222,14 @@ export default function TiendaPublica({
 }) {
   const { slug } = useParams()
   
-  // Estados principales
+  // Main states
   const [store, setStore] = useState(null)
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
-  const [loading, setLoading] = useState(!isPreview) // No loading si es preview
+  const [loading, setLoading] = useState(!isPreview)
   const [error, setError] = useState(null)
   
-  // Estados de UI
+  // UI states
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -366,7 +237,7 @@ export default function TiendaPublica({
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
 
-  // En modo preview, usar datos proporcionados directamente
+  // Preview mode: use provided data
   useEffect(() => {
     if (isPreview && previewStore) {
       setStore(previewStore)
@@ -376,16 +247,15 @@ export default function TiendaPublica({
     }
   }, [isPreview, previewStore, previewProducts, previewCategories])
 
-  // Cargar datos de la tienda (solo si NO es preview)
+  // Fetch store data (only in non-preview mode)
   useEffect(() => {
-    if (isPreview) return // No cargar datos en modo preview
+    if (isPreview) return
 
     const fetchStoreData = async () => {
       try {
         setLoading(true)
         setError(null)
 
-        // Obtener tienda por slug
         const { data: storeData, error: storeError } = await supabase
           .from('stores')
           .select('*')
@@ -400,16 +270,11 @@ export default function TiendaPublica({
 
         setStore(storeData)
 
-        // ========================================
-        // OBTENER LÍMITES DEL PLAN EFECTIVO
-        // ========================================
+        // Get effective plan limits
         let effectiveLimits = FREE_PLAN_LIMITS
-        
-        // Verificar si la suscripción está expirada
         const subscriptionStatus = getRemainingTime(storeData.subscription_end_at)
         const isSubscriptionExpired = subscriptionStatus.hasSubscription && subscriptionStatus.isExpired
         
-        // Si no expiró, obtener límites del plan actual
         if (!isSubscriptionExpired && storeData.plan) {
           const { data: planData } = await supabase
             .from('plans')
@@ -425,7 +290,7 @@ export default function TiendaPublica({
           }
         }
 
-        // Obtener categorías activas (limitadas por plan si aplica)
+        // Fetch categories
         let categoriesQuery = supabase
           .from('categories')
           .select('*')
@@ -434,15 +299,10 @@ export default function TiendaPublica({
           .order('sort_order', { ascending: true })
         
         categoriesQuery = applyLimit(categoriesQuery, effectiveLimits.maxCategories)
-        const { data: categoriesData, error: categoriesError } = await categoriesQuery
-        
-        if (categoriesError) {
-          console.error('Error fetching categories:', categoriesError)
-        }
-
+        const { data: categoriesData } = await categoriesQuery
         setCategories(categoriesData || [])
 
-        // Obtener productos activos (limitados por plan si aplica)
+        // Fetch products
         let productsQuery = supabase
           .from('products')
           .select('*')
@@ -451,15 +311,10 @@ export default function TiendaPublica({
           .order('sort_order', { ascending: true })
         
         productsQuery = applyLimit(productsQuery, effectiveLimits.maxProducts)
-        const { data: productsData, error: productsError } = await productsQuery
-        
-        if (productsError) {
-          console.error('Error fetching products:', productsError)
-        }
-
+        const { data: productsData } = await productsQuery
         setProducts(productsData || [])
 
-        // Incrementar vistas (solo en modo real, no preview)
+        // Increment views
         await supabase
           .from('stores')
           .update({ total_views: (storeData.total_views || 0) + 1 })
@@ -473,12 +328,10 @@ export default function TiendaPublica({
       }
     }
 
-    if (slug) {
-      fetchStoreData()
-    }
+    if (slug) fetchStoreData()
   }, [slug, isPreview])
 
-  // Filtrar productos
+  // Filter products
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       const matchesSearch = !searchQuery || 
@@ -492,7 +345,7 @@ export default function TiendaPublica({
     })
   }, [products, searchQuery, selectedCategory])
 
-  // Generar recomendaciones inteligentes (solo para planes de pago)
+  // Generate recommendations (paid plans only)
   const recommendations = useMemo(() => {
     if (!store?.id || store?.plan === 'gratis' || isPreview) return []
     return generateRecommendations(store.id, products, {
@@ -503,7 +356,7 @@ export default function TiendaPublica({
     })
   }, [store?.id, store?.plan, products, selectedProduct?.id, isPreview, searchQuery, selectedCategory, categories])
 
-  // Handler para ver producto (con tracking)
+  // Product view handler (with tracking)
   const handleViewProduct = useCallback((product) => {
     if (!isPreview && store?.id) {
       trackProductView(store.id, product.id, product.category_id)
@@ -512,30 +365,46 @@ export default function TiendaPublica({
     setImageIndex(0)
   }, [isPreview, store?.id])
 
-  // Funciones del carrito
-  const addToCart = useCallback((product) => {
-    // Track para recomendaciones (incluye category_id para scoring)
+  // Cart functions
+  const addToCart = useCallback((product, variant = null) => {
     if (!isPreview && store?.id) {
       trackAddToCart(store.id, product.id, product.category_id)
     }
     
+    const cartItemId = generateCartItemId(product.id, variant?.id)
+    const itemPrice = variant?.price ?? product.price
+    const itemImage = variant?.image_url ?? product.main_image_url
+    
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id)
+      const existing = prev.find(item => item.cartItemId === cartItemId)
       if (existing) {
         return prev.map(item => 
-          item.id === product.id 
+          item.cartItemId === cartItemId 
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
       }
-      return [...prev, { ...product, quantity: 1 }]
+      return [...prev, {
+        cartItemId,
+        id: product.id,
+        product_id: product.id,
+        variant_id: variant?.id || null,
+        name: product.name,
+        variant_title: variant?.title || null,
+        selected_options: variant?.options || null,
+        price: itemPrice,
+        main_image_url: itemImage,
+        quantity: 1,
+        track_inventory: product.track_inventory,
+        stock_quantity: variant?.stock_quantity ?? product.stock_quantity,
+      }]
     })
   }, [isPreview, store?.id])
 
-  const updateQuantity = useCallback((productId, delta) => {
+  const updateQuantity = useCallback((cartItemId, delta) => {
     setCart(prev => {
       return prev.map(item => {
-        if (item.id === productId) {
+        if (item.cartItemId === cartItemId) {
           const newQty = item.quantity + delta
           return newQty > 0 ? { ...item, quantity: newQty } : null
         }
@@ -544,8 +413,8 @@ export default function TiendaPublica({
     })
   }, [])
 
-  const removeFromCart = useCallback((productId) => {
-    setCart(prev => prev.filter(item => item.id !== productId))
+  const removeFromCart = useCallback((cartItemId) => {
+    setCart(prev => prev.filter(item => item.cartItemId !== cartItemId))
   }, [])
 
   const cartTotal = useMemo(() => {
@@ -556,32 +425,31 @@ export default function TiendaPublica({
     return cart.reduce((sum, item) => sum + item.quantity, 0)
   }, [cart])
 
-  // Formatear precio
-  const formatPrice = (price) => {
+  // Format price
+  const formatPrice = useCallback((price) => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: store?.currency || 'COP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(price)
-  }
+  }, [store?.currency])
 
-  // Enviar pedido por WhatsApp (deshabilitado en preview)
-  const sendWhatsAppOrder = () => {
-    if (isPreview) return // No permitir en modo preview
+  // WhatsApp checkout
+  const sendWhatsAppOrder = useCallback(() => {
+    if (isPreview) return
     if (!store?.whatsapp || cart.length === 0) return
 
-    // Sanitizar número: solo dígitos, sin espacios ni caracteres especiales
     const phone = store.whatsapp.replace(/\D/g, '')
     
-    // Construir mensaje con emojis usando códigos Unicode explícitos
     const lines = [
       '\u{1F6D2} *Nuevo Pedido - ' + store.name + '*',
       '',
       '\u{1F4E6} *Productos:*',
-      ...cart.map((item, index) => 
-        `${index + 1}. ${item.name} x${item.quantity} - ${formatPrice(item.price * item.quantity)}`
-      ),
+      ...cart.map((item, index) => {
+        const variantInfo = item.variant_title ? ` (${item.variant_title})` : ''
+        return `${index + 1}. ${item.name}${variantInfo} x${item.quantity} - ${formatPrice(item.price * item.quantity)}`
+      }),
       '',
       '\u{1F4B0} *Total: ' + formatPrice(cartTotal) + '*',
       '',
@@ -589,35 +457,35 @@ export default function TiendaPublica({
     ]
     
     const message = lines.join('\n')
-
-    // Construir URL con encoding correcto
     const encodedMessage = encodeURIComponent(message)
     const whatsappUrl = `https://wa.me/${phone}?text=${encodedMessage}`
     
-    // Abrir en nueva ventana
     window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
-  }
+  }, [isPreview, store, cart, formatPrice, cartTotal])
 
-  // Colores de la tienda (con fallbacks)
-  const primaryColor = store?.primary_color || '#2563eb'
-  const secondaryColor = store?.secondary_color || '#7c3aed'
-
-  // Theme basado en plantilla (si existe)
+  // Theme from store
   const theme = useMemo(() => {
     if (!store) return null
     return generateThemeFromStore(store)
   }, [store])
 
-  // ============================================
-  // ESTADOS DE CARGA Y ERROR
-  // ============================================
+  const primaryColor = store?.primary_color || theme?.primary || '#2563eb'
+  const secondaryColor = store?.secondary_color || theme?.secondary || '#7c3aed'
 
+  // CSS variables for theme
+  const cssVariables = useMemo(() => {
+    return generateCSSVariables(theme)
+  }, [theme])
+
+  // ============================================
+  // LOADING STATE
+  // ============================================
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div 
-            className="w-12 h-12 border-3 rounded-full animate-spin mx-auto mb-4"
+            className="w-12 h-12 border-[3px] rounded-full animate-spin mx-auto mb-4"
             style={{ 
               borderTopColor: 'transparent',
               borderRightColor: primaryColor,
@@ -625,12 +493,15 @@ export default function TiendaPublica({
               borderLeftColor: primaryColor,
             }}
           />
-          <p className="text-gray-500">Cargando tienda...</p>
+          <p className="text-gray-500 text-sm">Cargando tienda...</p>
         </div>
       </div>
     )
   }
 
+  // ============================================
+  // ERROR STATES
+  // ============================================
   if (error === 'not_found') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
@@ -638,13 +509,13 @@ export default function TiendaPublica({
           <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-6">
             <Store className="w-12 h-12 text-gray-400" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">Tienda no encontrada</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">Tienda no encontrada</h1>
           <p className="text-gray-500 mb-6">
             La tienda que buscas no existe o ha sido desactivada.
           </p>
           <a 
             href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors font-medium"
           >
             Volver al inicio
           </a>
@@ -664,7 +535,7 @@ export default function TiendaPublica({
           </p>
           <button 
             onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors"
+            className="px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors font-medium"
           >
             Reintentar
           </button>
@@ -673,380 +544,144 @@ export default function TiendaPublica({
     )
   }
 
-  // ============================================
-  // RENDER PRINCIPAL
-  // ============================================
-
-  // Guardia: si no hay store, mostrar loading (para modo preview mientras carga)
+  // Guard: if no store, show loading
   if (!store) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div 
-            className="w-12 h-12 border-3 rounded-full animate-spin mx-auto mb-4"
-            style={{ 
-              borderTopColor: 'transparent',
-              borderRightColor: '#2563eb',
-              borderBottomColor: '#2563eb',
-              borderLeftColor: '#2563eb',
-            }}
-          />
-          <p className="text-gray-500">Cargando tienda...</p>
+          <div className="w-12 h-12 border-[3px] border-gray-300 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-500 text-sm">Cargando...</p>
         </div>
       </div>
     )
   }
 
+  // ============================================
+  // MAIN RENDER
+  // ============================================
   return (
     <div 
       className="min-h-screen"
       style={{ 
         backgroundColor: theme?.background || '#f9fafb',
         fontFamily: theme?.fontFamily || 'Inter, system-ui, sans-serif',
-        '--eg-primary': theme?.primary || primaryColor,
-        '--eg-secondary': theme?.secondary || secondaryColor,
-        '--eg-accent': theme?.accent || primaryColor,
-        '--eg-bg': theme?.background || '#f9fafb',
-        '--eg-surface': theme?.surface || '#ffffff',
+        ...cssVariables
       }}
     >
-      {/* ============================================
-          HEADER PREMIUM
-          ============================================ */}
-      <header 
-        className={`sticky top-0 z-40 transition-all ${
-          theme?.headerStyle === 'glass' 
-            ? 'backdrop-blur-xl bg-white/80 border-b border-white/30 shadow-sm' 
-            : theme?.headerStyle === 'minimal'
-            ? 'bg-white/95 backdrop-blur-sm border-b border-gray-100'
-            : 'bg-white border-b border-gray-100 shadow-sm'
-        }`}
-      >
-        <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
-          {/* Logo y nombre - Premium */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-            {store.logo_url ? (
-              <div className="relative shrink-0">
-                <img 
-                  src={store.logo_url} 
-                  alt={store.name}
-                  className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl object-cover ring-2 ring-white shadow-md"
-                />
-              </div>
-            ) : (
-              <div 
-                className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-lg ring-2 ring-white/50 shrink-0"
-                style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
-              >
-                {store.name?.charAt(0)?.toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="inline-flex items-center gap-1.5 min-w-0 max-w-full sm:max-w-none px-2 py-0.5 sm:px-0 sm:py-0 rounded-lg bg-gray-50 sm:bg-transparent border border-gray-200 sm:border-0">
-                  <h1 className="font-bold text-gray-900 leading-tight truncate text-sm sm:text-base">
-                    {store.name}
-                  </h1>
-                  {store.plan !== 'gratis' && (
-                    <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500 flex-shrink-0" title="Tienda verificada" />
-                  )}
-                </span>
-              </div>
-              {store.city && (
-                <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5 truncate">
-                  <MapPin className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{store.city}</span>
-                </p>
-              )}
-            </div>
-          </div>
+      {/* Header */}
+      <StoreHeader
+        store={store}
+        theme={theme}
+        primaryColor={primaryColor}
+        secondaryColor={secondaryColor}
+        cartCount={cartCount}
+        onCartClick={() => setIsCartOpen(true)}
+        isPreview={isPreview}
+      />
 
-          {/* Acciones del header */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {/* Compartir (solo desktop) */}
-            <button
-              onClick={() => {
-                if (navigator.share) {
-                  navigator.share({ title: store.name, url: window.location.href })
-                } else {
-                  navigator.clipboard.writeText(window.location.href)
-                }
-              }}
-              className="hidden sm:flex p-2.5 rounded-xl hover:bg-gray-100 transition-colors"
-              title="Compartir tienda"
-            >
-              <Share2 className="w-5 h-5 text-gray-500" />
-            </button>
-            
-            {/* Carrito - Premium */}
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="relative p-2 sm:p-2.5 rounded-xl hover:bg-gray-100 transition-colors group"
-            >
-              <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700 group-hover:scale-105 transition-transform" />
-              {cartCount > 0 && (
-                <span 
-                  className="absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 min-w-[18px] sm:min-w-[20px] h-[18px] sm:h-5 px-1 text-[10px] sm:text-xs font-bold text-white rounded-full flex items-center justify-center shadow-lg"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  {cartCount > 99 ? '99+' : cartCount}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Hero / Banner */}
+      <StoreHero
+        store={store}
+        primaryColor={primaryColor}
+        secondaryColor={secondaryColor}
+      />
 
-      {/* ============================================
-          HERO / BANNER PREMIUM
-          ============================================ */}
-      {store.banner_url ? (
-        <div className="relative h-44 sm:h-56 md:h-72 overflow-hidden">
-          <img 
-            src={store.banner_url} 
-            alt="Banner"
-            className="w-full h-full object-cover"
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {/* Welcome Message */}
+        <div className="mb-6 sm:mb-8">
+          <StoreWelcome
+            message={store.welcome_message}
+            primaryColor={primaryColor}
+            secondaryColor={secondaryColor}
           />
-          {/* Overlay con gradiente elegante */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-          
-          {/* Info sobre el banner (solo desktop) */}
-          <div className="absolute bottom-0 left-0 right-0 p-6 hidden md:block">
-            <div className="max-w-6xl mx-auto">
-              {store.description && (
-                <p className="text-white/90 text-sm max-w-xl line-clamp-2">
-                  {store.description}
-                </p>
-              )}
-            </div>
-          </div>
         </div>
-      ) : (
-        /* Hero sin banner - Gradiente elegante */
-        <div 
-          className="relative h-36 sm:h-44 md:h-52 overflow-hidden"
-          style={{ 
-            background: `linear-gradient(135deg, ${primaryColor}15 0%, ${secondaryColor}20 50%, ${primaryColor}10 100%)` 
-          }}
-        >
-          {/* Patrón decorativo sutil */}
-          <div 
-            className="absolute inset-0 opacity-30"
-            style={{
-              backgroundImage: `radial-gradient(circle at 20% 50%, ${primaryColor}20 0%, transparent 50%), radial-gradient(circle at 80% 50%, ${secondaryColor}20 0%, transparent 50%)`
-            }}
-          />
-          
-          {/* Contenido del hero */}
-          <div className="relative h-full max-w-6xl mx-auto px-4 flex flex-col justify-center">
-            {store.description && (
-              <p className="text-gray-600 text-sm md:text-base max-w-xl">
-                {store.description}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* ============================================
-          CONTENIDO PRINCIPAL
-          ============================================ */}
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        
-        {/* Mensaje de bienvenida - Premium */}
-        {store.welcome_message && (
-          <div 
-            className="mb-6 p-4 sm:p-5 rounded-2xl text-white relative overflow-hidden"
-            style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
-          >
-            {/* Decoración */}
-            <div className="absolute top-0 right-0 w-32 h-32 opacity-10">
-              <Sparkles className="w-full h-full" />
-            </div>
-            <p className="relative text-center font-medium text-sm sm:text-base">
-              {store.welcome_message}
-            </p>
-          </div>
-        )}
+        {/* Search & Filters */}
+        <StoreSearchAndFilters
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          selectedCategory={selectedCategory}
+          onCategoryChange={setSelectedCategory}
+          categories={categories}
+          productCount={filteredProducts.length}
+          primaryColor={primaryColor}
+          theme={theme}
+        />
 
-        {/* ============================================
-            BARRA DE BÚSQUEDA Y FILTROS
-            ============================================ */}
-        <div className="space-y-4 mb-6">
-          {/* Búsqueda premium */}
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="¿Qué estás buscando?"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 h-12 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:border-transparent shadow-sm hover:shadow-md transition-shadow"
-              style={{ '--tw-ring-color': primaryColor }}
+        {/* Products */}
+        <div className="mt-6">
+          {filteredProducts.length === 0 ? (
+            <EmptyProductsState
+              searchQuery={searchQuery}
+              primaryColor={primaryColor}
+              onClearSearch={() => setSearchQuery('')}
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
-              >
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            )}
-          </div>
-
-          {/* Filtro por categorías - Premium pills */}
-          {categories.length > 0 && (
-            <div className="flex items-center gap-3">
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
-                <button
-                  onClick={() => setSelectedCategory('all')}
-                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    selectedCategory === 'all'
-                      ? 'text-white shadow-lg scale-105'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 hover:border-gray-300'
-                  }`}
-                  style={selectedCategory === 'all' ? { 
-                    backgroundColor: primaryColor,
-                    boxShadow: `0 4px 14px ${primaryColor}40`
-                  } : {}}
-                >
-                  Todos
-                </button>
-                {categories.map(category => (
-                  <button
-                    key={category.id}
-                    onClick={() => setSelectedCategory(category.id)}
-                    className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                      selectedCategory === category.id
-                        ? 'text-white shadow-lg scale-105'
-                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 hover:border-gray-300'
-                    }`}
-                    style={selectedCategory === category.id ? { 
-                      backgroundColor: primaryColor,
-                      boxShadow: `0 4px 14px ${primaryColor}40`
-                    } : {}}
-                  >
-                    {category.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+          ) : (
+            <ProductGrid
+              products={filteredProducts}
+              primaryColor={primaryColor}
+              theme={theme}
+              formatPrice={formatPrice}
+              onView={handleViewProduct}
+              onAddToCart={addToCart}
+            />
           )}
-
-          {/* Contador de resultados */}
-          <div className="flex items-center justify-between text-sm">
-            <p className="text-gray-500">
-              {filteredProducts.length === 0 
-                ? 'Sin resultados'
-                : filteredProducts.length === 1 
-                  ? '1 producto' 
-                  : `${filteredProducts.length} productos`
-              }
-              {searchQuery && <span className="text-gray-400"> para "{searchQuery}"</span>}
-            </p>
-          </div>
         </div>
 
-        {/* ============================================
-            GRID DE PRODUCTOS
-            ============================================ */}
-        {filteredProducts.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-3xl border border-gray-100">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Package className="w-10 h-10 text-gray-300" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {searchQuery ? 'Sin resultados' : 'No hay productos'}
-            </h3>
-            <p className="text-gray-500 max-w-sm mx-auto">
-              {searchQuery 
-                ? 'Intenta con otra búsqueda o explora otras categorías' 
-                : 'Esta tienda aún no tiene productos disponibles'}
-            </p>
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="mt-4 px-4 py-2 text-sm font-medium rounded-xl hover:bg-gray-100 transition-colors"
-                style={{ color: primaryColor }}
-              >
-                Limpiar búsqueda
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-            {filteredProducts.map(product => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                primaryColor={primaryColor}
-                formatPrice={formatPrice}
-                onView={() => handleViewProduct(product)}
-                onAddToCart={() => addToCart(product)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* ============================================
-            SECCIÓN "TE PUEDE INTERESAR" (Solo planes de pago)
-            ============================================ */}
+        {/* Recommendations */}
         {recommendations.length > 0 && store?.plan !== 'gratis' && (
           <RecommendedSection
             products={recommendations}
             primaryColor={primaryColor}
+            theme={theme}
             formatPrice={formatPrice}
             onView={handleViewProduct}
             onAddToCart={addToCart}
           />
         )}
 
-        {/* ============================================
-            FOOTER DE TIENDA - Información adicional
-            ============================================ */}
-        <StoreFooter store={store} primaryColor={primaryColor} />
+        {/* Footer */}
+        <StoreFooter
+          store={store}
+          theme={theme}
+          primaryColor={primaryColor}
+        />
       </main>
 
-      {/* Botón flotante de carrito - Premium */}
-      {cart.length > 0 && !isCartOpen && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-          <button
-            onClick={() => setIsCartOpen(true)}
-            className="flex items-center gap-3 px-6 py-4 text-white rounded-2xl shadow-2xl hover:scale-105 transition-transform backdrop-blur-sm"
-            style={{ 
-              backgroundColor: primaryColor,
-              boxShadow: `0 10px 40px ${primaryColor}50`
-            }}
-          >
-            <ShoppingBag className="w-5 h-5" />
-            <span className="font-semibold">Ver carrito ({cartCount})</span>
-            <span className="font-bold">{formatPrice(cartTotal)}</span>
-          </button>
-        </div>
+      {/* Floating Cart Button */}
+      {!isCartOpen && (
+        <FloatingCartButton
+          cartCount={cartCount}
+          cartTotal={cartTotal}
+          primaryColor={primaryColor}
+          theme={theme}
+          formatPrice={formatPrice}
+          onClick={() => setIsCartOpen(true)}
+        />
       )}
 
-      {/* Modal de producto */}
+      {/* Product Modal */}
       {selectedProduct && (
         <ProductModal
           product={selectedProduct}
           primaryColor={primaryColor}
           secondaryColor={secondaryColor}
+          theme={theme}
           formatPrice={formatPrice}
           imageIndex={imageIndex}
           setImageIndex={setImageIndex}
           onClose={() => setSelectedProduct(null)}
-          onAddToCart={() => {
-            addToCart(selectedProduct)
-            setSelectedProduct(null)
-          }}
+          onAddToCart={addToCart}
         />
       )}
 
-      {/* Drawer del carrito */}
+      {/* Cart Drawer */}
       {isCartOpen && (
         <CartDrawer
           cart={cart}
           store={store}
+          theme={theme}
           primaryColor={primaryColor}
           formatPrice={formatPrice}
           cartTotal={cartTotal}
@@ -1054,716 +689,14 @@ export default function TiendaPublica({
           removeFromCart={removeFromCart}
           onClose={() => setIsCartOpen(false)}
           onCheckout={sendWhatsAppOrder}
+          isPreview={isPreview}
         />
       )}
+
+      {/* Extra bottom padding when floating cart is visible */}
+      {cart.length > 0 && !isCartOpen && (
+        <div className="h-24 sm:h-20" />
+      )}
     </div>
-  )
-}
-
-// ============================================
-// COMPONENTES INTERNOS
-// ============================================
-
-/**
- * ProductCard - Tarjeta de producto premium
- */
-const ProductCard = memo(function ProductCard({ product, primaryColor, formatPrice, onView, onAddToCart }) {
-  const [added, setAdded] = useState(false)
-  const hasDiscount = product.compare_price && product.compare_price > product.price
-  const isLowStock = product.track_inventory && product.stock_quantity > 0 && product.stock_quantity <= 5
-  const isOutOfStock = product.track_inventory && product.stock_quantity === 0
-
-  const handleAdd = (e) => {
-    e.stopPropagation()
-    if (isOutOfStock) return
-    onAddToCart()
-    setAdded(true)
-    setTimeout(() => setAdded(false), 1500)
-  }
-
-  return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-xl hover:border-gray-200 transition-all duration-300 group">
-      {/* Imagen - Contenedor fijo con aspect ratio */}
-      <div 
-        className="relative w-full overflow-hidden bg-gray-50 cursor-pointer"
-        onClick={onView}
-      >
-        {/* Aspect ratio container - cuadrado en móvil, 4:3 en desktop */}
-        <div className="relative w-full aspect-square sm:aspect-[4/3]">
-          {product.main_image_url ? (
-            <img
-              src={product.main_image_url}
-              alt={product.name}
-              loading="lazy"
-              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            />
-          ) : (
-            <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-50">
-              <Package className="w-12 h-12 text-gray-300" />
-            </div>
-          )}
-        </div>
-        
-        {/* Badges apilados */}
-        <div className="absolute top-2 left-2 flex flex-col gap-1 z-10">
-          {/* Badge de descuento */}
-          {hasDiscount && (
-            <span 
-              className="px-2 py-1 text-xs font-bold text-white rounded-lg shadow-sm"
-              style={{ backgroundColor: '#ef4444' }}
-            >
-              -{Math.round((1 - product.price / product.compare_price) * 100)}%
-            </span>
-          )}
-          
-          {/* Badge de destacado */}
-          {product.is_featured && (
-            <span className="px-2 py-1 text-xs font-bold text-amber-700 bg-amber-100 rounded-lg flex items-center gap-1">
-              <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-              <span className="hidden sm:inline">Destacado</span>
-            </span>
-          )}
-          
-          {/* Badge de stock bajo */}
-          {isLowStock && (
-            <span className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded-lg">
-              ¡Últimas {product.stock_quantity}!
-            </span>
-          )}
-        </div>
-
-        {/* Overlay en hover - Desktop */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors hidden sm:block pointer-events-none" />
-      </div>
-
-      {/* Info */}
-      <div className="p-3 sm:p-4">
-        <h3 
-          className="font-medium text-gray-900 text-sm leading-snug mb-1.5 line-clamp-2 cursor-pointer group-hover:text-gray-700 transition-colors"
-          onClick={onView}
-        >
-          {product.name}
-        </h3>
-        
-        {/* Precio */}
-        <div className="flex items-baseline gap-2 mb-3">
-          <span className="font-bold text-gray-900 text-base" style={{ color: hasDiscount ? '#ef4444' : 'inherit' }}>
-            {formatPrice(product.price)}
-          </span>
-          {hasDiscount && (
-            <span className="text-xs text-gray-400 line-through">
-              {formatPrice(product.compare_price)}
-            </span>
-          )}
-        </div>
-
-        {/* Botón de agregar - Premium */}
-        <button
-          onClick={handleAdd}
-          disabled={isOutOfStock}
-          className={`
-            w-full py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2
-            ${isOutOfStock 
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-              : added 
-                ? 'bg-green-500 text-white' 
-                : 'text-white hover:opacity-90 active:scale-[0.98]'
-            }
-          `}
-          style={!isOutOfStock && !added ? { backgroundColor: primaryColor } : {}}
-        >
-          {isOutOfStock ? (
-            'Agotado'
-          ) : added ? (
-            <>
-              <Check className="w-4 h-4" />
-              ¡Agregado!
-            </>
-          ) : (
-            <>
-              <Plus className="w-4 h-4" />
-              Agregar
-            </>
-          )}
-        </button>
-      </div>
-    </div>
-  )
-})
-
-// Modal de detalle del producto
-function ProductModal({ product, primaryColor, secondaryColor, formatPrice, imageIndex, setImageIndex, onClose, onAddToCart }) {
-  const hasDiscount = product.compare_price && product.compare_price > product.price
-  
-  // Galería de imágenes
-  const images = [
-    product.main_image_url,
-    ...(Array.isArray(product.gallery_urls) ? product.gallery_urls : [])
-  ].filter(Boolean)
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      {/* Overlay */}
-      <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative w-full max-w-2xl max-h-[90vh] bg-white rounded-t-3xl md:rounded-3xl overflow-hidden animate-slide-up">
-        {/* Cerrar */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-white/90 backdrop-blur rounded-full shadow-lg hover:bg-white transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        <div className="flex flex-col md:flex-row max-h-[90vh] overflow-auto">
-          {/* Imagen */}
-          <div className="relative w-full md:w-1/2 aspect-square bg-gray-100 flex-shrink-0">
-            {images.length > 0 ? (
-              <>
-                <img
-                  src={images[imageIndex]}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-                {images.length > 1 && (
-                  <>
-                    <button
-                      onClick={() => setImageIndex(i => i > 0 ? i - 1 : images.length - 1)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg hover:bg-white"
-                    >
-                      <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => setImageIndex(i => i < images.length - 1 ? i + 1 : 0)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 rounded-full shadow-lg hover:bg-white"
-                    >
-                      <ChevronRight className="w-5 h-5" />
-                    </button>
-                    {/* Indicadores */}
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-                      {images.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setImageIndex(i)}
-                          className={`w-2 h-2 rounded-full transition-all ${
-                            i === imageIndex ? 'w-6' : 'bg-white/50'
-                          }`}
-                          style={i === imageIndex ? { backgroundColor: primaryColor } : {}}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Package className="w-20 h-20 text-gray-300" />
-              </div>
-            )}
-          </div>
-
-          {/* Detalles */}
-          <div className="flex-1 p-6 flex flex-col">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">{product.name}</h2>
-            
-            {/* Precio */}
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-2xl font-bold" style={{ color: primaryColor }}>
-                {formatPrice(product.price)}
-              </span>
-              {hasDiscount && (
-                <>
-                  <span className="text-lg text-gray-400 line-through">
-                    {formatPrice(product.compare_price)}
-                  </span>
-                  <span 
-                    className="px-2 py-0.5 text-xs font-bold text-white rounded-md"
-                    style={{ backgroundColor: secondaryColor }}
-                  >
-                    -{Math.round((1 - product.price / product.compare_price) * 100)}%
-                  </span>
-                </>
-              )}
-            </div>
-
-            {/* Descripción */}
-            {product.description && (
-              <div className="mb-6 flex-1">
-                <p className="text-gray-600 leading-relaxed">{product.description}</p>
-              </div>
-            )}
-
-            {/* Stock (si aplica) */}
-            {product.track_inventory && (
-              <p className={`text-sm mb-4 ${product.stock_quantity > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                {product.stock_quantity > 0 
-                  ? `${product.stock_quantity} disponibles`
-                  : 'Sin stock'}
-              </p>
-            )}
-
-            {/* Botón agregar */}
-            <button
-              onClick={onAddToCart}
-              disabled={product.track_inventory && product.stock_quantity === 0}
-              className="w-full py-4 text-white font-semibold rounded-2xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: primaryColor }}
-            >
-              Agregar al carrito
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes slide-up {
-          from { transform: translateY(100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        .animate-slide-up {
-          animation: slide-up 0.3s ease-out;
-        }
-      `}</style>
-    </div>
-  )
-}
-
-// Drawer del carrito
-function CartDrawer({ cart, store, primaryColor, formatPrice, cartTotal, updateQuantity, removeFromCart, onClose, onCheckout }) {
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Overlay */}
-      <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Drawer */}
-      <div className="relative w-full max-w-md h-full bg-white shadow-2xl animate-slide-left flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Tu carrito</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Items */}
-        <div className="flex-1 overflow-auto p-4">
-          {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center">
-              <ShoppingBag className="w-16 h-16 text-gray-300 mb-4" />
-              <p className="text-gray-500">Tu carrito está vacío</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {cart.map(item => (
-                <div key={item.id} className="flex gap-3 p-3 bg-gray-50 rounded-xl">
-                  {/* Imagen */}
-                  <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
-                    {item.main_image_url ? (
-                      <img 
-                        src={item.main_image_url} 
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-6 h-6 text-gray-400" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-gray-900 text-sm truncate">{item.name}</h4>
-                    <p className="text-sm font-bold" style={{ color: primaryColor }}>
-                      {formatPrice(item.price)}
-                    </p>
-                    
-                    {/* Controles de cantidad */}
-                    <div className="flex items-center gap-2 mt-2">
-                      <button
-                        onClick={() => updateQuantity(item.id, -1)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:bg-gray-100"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(item.id, 1)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-white border border-gray-200 hover:bg-gray-100"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Subtotal y eliminar */}
-                  <div className="flex flex-col items-end justify-between">
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="p-1 hover:bg-red-100 rounded text-gray-400 hover:text-red-500"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <span className="text-sm font-bold text-gray-900">
-                      {formatPrice(item.price * item.quantity)}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Footer con total y botón */}
-        {cart.length > 0 && (
-          <div className="border-t border-gray-100 p-4 space-y-4">
-            {/* Total */}
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Total</span>
-              <span className="text-2xl font-bold text-gray-900">{formatPrice(cartTotal)}</span>
-            </div>
-
-            {/* Botón WhatsApp */}
-            <button
-              onClick={onCheckout}
-              className="w-full py-4 flex items-center justify-center gap-3 text-white font-semibold rounded-2xl transition-all hover:opacity-90 active:scale-[0.98]"
-              style={{ backgroundColor: '#25D366' }}
-            >
-              <MessageCircle className="w-5 h-5" />
-              Finalizar pedido por WhatsApp
-            </button>
-          </div>
-        )}
-      </div>
-
-      <style>{`
-        @keyframes slide-left {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        .animate-slide-left {
-          animation: slide-left 0.3s ease-out;
-        }
-      `}</style>
-    </div>
-  )
-}
-
-// ============================================
-// SECCIÓN "TE PUEDE INTERESAR" (Premium)
-// ============================================
-
-function RecommendedSection({ products, primaryColor, formatPrice, onView, onAddToCart }) {
-  if (!products || products.length === 0) return null
-
-  return (
-    <section className="mt-12 pt-8 border-t border-gray-200">
-      {/* Header de la sección */}
-      <div className="flex items-center gap-3 mb-6">
-        <div 
-          className="p-2 rounded-xl"
-          style={{ backgroundColor: `${primaryColor}15` }}
-        >
-          <Sparkles className="w-5 h-5" style={{ color: primaryColor }} />
-        </div>
-        <div>
-          <h2 className="text-lg font-bold text-gray-900">Te puede interesar</h2>
-          <p className="text-sm text-gray-500">Basado en lo que has visto</p>
-        </div>
-      </div>
-
-      {/* Grid de productos - Máximo 4 sugerencias */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        {products.slice(0, 4).map(product => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            primaryColor={primaryColor}
-            formatPrice={formatPrice}
-            onView={() => onView(product)}
-            onAddToCart={() => onAddToCart(product)}
-          />
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ============================================
-// FOOTER DE TIENDA - Información adicional
-// ============================================
-
-function StoreFooter({ store, primaryColor }) {
-  const hasContactInfo = store.address || store.business_hours || store.whatsapp
-  const hasSocialLinks = store.social_links && Object.keys(store.social_links).length > 0
-  const hasPaymentMethods = store.payment_methods && store.payment_methods.length > 0
-  const hasDeliveryInfo = store.delivery_info
-  
-  // Si no hay info adicional, no renderizar
-  if (!hasContactInfo && !hasSocialLinks && !hasPaymentMethods && !hasDeliveryInfo) {
-    return null
-  }
-
-  // Parsear business_hours si es JSONB
-  const businessHoursText = typeof store.business_hours === 'object' 
-    ? store.business_hours?.text 
-    : store.business_hours
-
-  return (
-    <footer className="mt-12 pt-8">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* Header */}
-        <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-4 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div 
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ backgroundColor: `${primaryColor}15` }}
-            >
-              <Store className="w-5 h-5" style={{ color: primaryColor }} />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900">
-                Información
-              </h3>
-              <p className="text-xs sm:text-sm text-gray-500">
-                Contacta y conoce más sobre esta tienda
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Content Grid */}
-        <div className="p-5 sm:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            
-            {/* Bloque: Contacto */}
-            {(store.whatsapp || store.address || store.city) && (
-              <div className="bg-gray-50/50 rounded-xl border border-gray-100 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs uppercase tracking-wide font-medium text-gray-500">
-                    Contacto
-                  </span>
-                </div>
-                
-                <div className="space-y-3">
-                  {/* Ubicación */}
-                  {(store.address || store.city) && (
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-white border border-gray-100 shrink-0">
-                        <MapPin className="w-4 h-4 text-gray-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-500">Ubicación</p>
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {[store.address, store.city].filter(Boolean).join(', ')}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Horario */}
-                  {businessHoursText && (
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-white border border-gray-100 shrink-0">
-                        <Clock className="w-4 h-4 text-gray-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-500">Horario</p>
-                        <p className="text-sm font-medium text-gray-900">
-                          {businessHoursText}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* WhatsApp con CTA */}
-                  {store.whatsapp && (
-                    <div className="pt-2">
-                      <a 
-                        href={`https://wa.me/${store.whatsapp.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl font-medium text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
-                        style={{ backgroundColor: '#25D366' }}
-                      >
-                        <Phone className="w-4 h-4" />
-                        Escribir por WhatsApp
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Bloque: Redes Sociales */}
-            {hasSocialLinks && (
-              <div className="bg-gray-50/50 rounded-xl border border-gray-100 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs uppercase tracking-wide font-medium text-gray-500">
-                    Síguenos
-                  </span>
-                </div>
-                
-                <div className="flex flex-wrap gap-2">
-                  {store.social_links.instagram && (
-                    <a
-                      href={`https://instagram.com/${store.social_links.instagram.replace('@', '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center">
-                        <Instagram className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs text-gray-500">Instagram</p>
-                        <p className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                          @{store.social_links.instagram.replace('@', '')}
-                        </p>
-                      </div>
-                    </a>
-                  )}
-                  
-                  {store.social_links.facebook && (
-                    <a
-                      href={store.social_links.facebook.startsWith('http') 
-                        ? store.social_links.facebook 
-                        : `https://facebook.com/${store.social_links.facebook}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                        <Facebook className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs text-gray-500">Facebook</p>
-                        <p className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                          Visitar página
-                        </p>
-                      </div>
-                    </a>
-                  )}
-
-                  {store.social_links.tiktok && (
-                    <a
-                      href={`https://tiktok.com/@${store.social_links.tiktok.replace('@', '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all group"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center">
-                        <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005 20.1a6.34 6.34 0 0010.86-4.43v-7a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1-.1z"/>
-                        </svg>
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs text-gray-500">TikTok</p>
-                        <p className="text-sm font-medium text-gray-900 group-hover:text-gray-700">
-                          @{store.social_links.tiktok.replace('@', '')}
-                        </p>
-                      </div>
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Bloque: Métodos de Pago y Envío */}
-            {(hasPaymentMethods || hasDeliveryInfo) && (
-              <div className="bg-gray-50/50 rounded-xl border border-gray-100 p-4">
-                {hasPaymentMethods && (
-                  <div className="mb-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <CreditCard className="w-4 h-4 text-gray-400" />
-                      <span className="text-xs uppercase tracking-wide font-medium text-gray-500">
-                        Métodos de pago
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {store.payment_methods.map((method, idx) => (
-                        <span 
-                          key={idx}
-                          className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-white border border-gray-200 text-gray-700"
-                        >
-                          {method}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {hasDeliveryInfo && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Truck className="w-4 h-4 text-gray-400" />
-                      <span className="text-xs uppercase tracking-wide font-medium text-gray-500">
-                        Envíos
-                      </span>
-                    </div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {store.delivery_info}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Powered by EmprendeGo (todos los planes excepto PRO) */}
-        {store.plan !== 'pro' && (
-          <div className="px-5 sm:px-6 py-5 border-t border-gray-100 bg-gradient-to-b from-gray-50/50 to-white">
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-              {/* Logo + Texto */}
-              <div className="flex items-center gap-2 text-gray-500">
-                <div 
-                  className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[10px] font-bold"
-                  style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}dd)` }}
-                >
-                  E
-                </div>
-                <span className="text-xs sm:text-sm">
-                  Creado con{' '}
-                  <a 
-                    href="/" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="font-semibold hover:underline transition-colors"
-                    style={{ color: primaryColor }}
-                  >
-                    EmprendeGo
-                  </a>
-                </span>
-              </div>
-              
-              {/* Separador visual (solo desktop) */}
-              <span className="hidden sm:block w-1 h-1 rounded-full bg-gray-300" />
-              
-              {/* CTA */}
-              <a
-                href="/vende-con-nosotros"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 text-xs font-medium text-gray-600 hover:text-gray-900 transition-all"
-              >
-                <Rocket className="w-3 h-3" />
-                Vende con nosotros
-              </a>
-            </div>
-          </div>
-        )}
-      </div>
-    </footer>
   )
 }
